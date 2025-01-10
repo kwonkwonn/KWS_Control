@@ -13,8 +13,8 @@ func main() {
 	fmt.Println("hellot")
 
 	var TaskHandlersPool WorkerConn.TaskHandler
-	WorkerConn.InitWorkers(&TaskHandlersPool)
-	contextStruct := vms.InitializeDevices()
+	WorkerConn.InitWorkers(&TaskHandlersPool)//스레드를 초기화하는 함수
+	contextStruct := vms.InitializeDevices()//VM을 정의하는 함수
 	go func() {
 		err := api.Server(8080, &TaskHandlersPool, &contextStruct)
 		if err != nil {

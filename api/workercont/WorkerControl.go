@@ -31,9 +31,13 @@ func InitWorkers(pool *TaskHandler) {
 		pool.TaskHandlersList[i] = &TaskWorker{
 			tasksLength: 0,
 			workLoads:   make(chan *Task, NumOfAllWorkload),
-			workerNum:   i,
+			//스레드 관련 내용인거 같은데 뭔소리인지 모르겠음.
+			//내생각엔 스레드를 처리하는 큐? 느낌인거 같음.
+
+
+			workerNum:   i, // 코어의 고유 번호
 		}
-		go pool.TaskHandlersList[i].StartWorking()
+		go pool.TaskHandlersList[i].StartWorking()//????
 
 	}
 }
