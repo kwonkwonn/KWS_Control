@@ -1,12 +1,13 @@
 package vms
 
 import (
+	"context"
 	"fmt"
 
 	_ "gopkg.in/yaml.v3"
 )
 
-func InitializeDevices() InfraContext {
+func InitializeDevices(ctx context.Context) InfraContext {
 	initialContext := InfraContext{
 		Computers:         []Computer{},
 		VMPoolUnallocated: []*VM{},
@@ -29,7 +30,7 @@ func InitializeDevices() InfraContext {
 
 	initialContext.Computers = append(initialContext.Computers, COM1, COM2)
 	fmt.Println("hellot1")
-	initialContext.UpdateList()
+	initialContext.UpdateList(ctx)
 	fmt.Println("hellot2")
 
 	return initialContext

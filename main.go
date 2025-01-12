@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	_ "os"
 
@@ -12,9 +13,11 @@ import (
 func main() {
 	fmt.Println("hellot")
 
+	ctx := context.Background()
+
 	var TaskHandlersPool WorkerConn.TaskHandler
 	WorkerConn.InitWorkers(&TaskHandlersPool)
-	contextStruct := vms.InitializeDevices()
+	contextStruct := vms.InitializeDevices(ctx)
 	go func() {
 		err := api.Server(8080, &TaskHandlersPool, &contextStruct)
 		if err != nil {
