@@ -32,8 +32,8 @@ type TaskWorker struct {
 }
 
 type TaskHandler struct {
-	TaskHandlersList []*TaskWorker // 현재 돌아가고 있는 코어를 가리키는 포인터
-	workingIndex     int // 현재 돌아가고 있는 코어의 갯수
+	TaskHandlersList []*TaskWorker // 현재 돌아가고 있는 스레드를 가리키는 포인터
+	workingIndex     int // 현재 돌아가고 있는 스레드의 갯수
 } //테스크 임베딩, 필드 추가 필요
 
 type TaskControlCreateVM struct {

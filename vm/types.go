@@ -1,16 +1,17 @@
 package vms
 
 import (
-	libvirt "libvirt.org/go/libvirt"
+	_ "libvirt.org/go/libvirt"
 )
 
 type UUID string
 
+//모든 VM의 상태를 관리
 type InfraContext struct {
-	Computers         []Computer
-	VMPoolUnallocated []*VM
-	VMPoolAllocated   []*VM
-	VMPool            map[UUID]*VM
+	Computers         []Computer //관리중인 컴퓨터의 목록 
+	VMPoolUnallocated []*VM //아직 할당되지 않은 VM의 목록 (X)
+	VMPoolAllocated   []*VM //할당된 VM의 목록
+	VMPool            map[UUID]*VM //UUID를 활용한 VM의 전체 맵
 }
 
 //모든 컴퓨터, vm에 대한 정보를 담고 있음.
@@ -29,7 +30,7 @@ type VM struct {
 
 //VM 내부의 상세 정보 표시
 type VMInfo struct {
-	State     libvirt.DomainState `json:"state"`
+	// State     libvirt.DomainState `json:"state"`
 	MaxMem    uint64              `json:"maxmem"`
 	Memory    uint64              `json:"memory"`
 	NrVirtCpu uint                `json:"nrVirtCpu"`
@@ -38,6 +39,7 @@ type VMInfo struct {
 	IP        string              `json:"ip"`
 }
 
+//
 type Computer struct {
 	Name      string `json:"name"`
 	Allocated []VM   `json:"allocated"`

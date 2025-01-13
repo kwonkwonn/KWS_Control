@@ -5,9 +5,12 @@ import (
 	"fmt"
 	_ "log"
 	"time"
+	"sync"
 )
 
+
 func PseudoRequestSender(workerHandler *TaskHandler) {
+	//workerHandler.Lock()
 	con := Task{
 		FunctionName: ConnectV,
 	}
@@ -28,6 +31,7 @@ func PseudoRequestSender(workerHandler *TaskHandler) {
 	for j := 0; j < 20; j++ {
 		workerHandler.WorkerAllocate(&taskList[j%(len(taskList))])
 	}
+	//workerHandler.Unlock()
 }
 
 func (t *TaskWorker) UpdateStatusTest(context.Context) {
@@ -52,10 +56,12 @@ func (t *TaskWorker) GetStatusTest(context.Context) {
 }
 
 func (w *TaskWorker) workDescription(workName functionName) {
+	fmt.Printf("\n")
 	fmt.Println("*******************************************************")
 	fmt.Printf("worker %d \n", w.workerNum)
 	fmt.Printf("current length of workLoad is %d currently working on %s \n", w.tasksLength, functionNameEmmitor(workName))
 	fmt.Println("*******************************************************")
+	fmt.Printf("\n")
 }
 
 func functionNameEmmitor(functionNum functionName) string {
