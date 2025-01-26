@@ -1,13 +1,12 @@
 package WorkerCont
 
 import (
-	"context"
+	//"context"
 	"fmt"
 	_ "log"
+	_ "sync"
 	"time"
-	"sync"
 )
-
 
 func PseudoRequestSender(workerHandler *TaskHandler) {
 	//workerHandler.Lock()
@@ -34,23 +33,23 @@ func PseudoRequestSender(workerHandler *TaskHandler) {
 	//workerHandler.Unlock()
 }
 
-func (t *TaskWorker) UpdateStatusTest(context.Context) {
+func (t *TaskWorker) UpdateStatusTest() {
 	t.workDescription(UpdateStat)
 	time.Sleep(5 * time.Second)
 }
-func (t *TaskWorker) CreateVMTest(context.Context) {
+func (t *TaskWorker) CreateVMTest() {
 	t.workDescription(CreateV)
 	time.Sleep(5 * time.Second)
 }
-func (t *TaskWorker) ConnectVMTest(context.Context) {
+func (t *TaskWorker) ConnectVMTest() {
 	t.workDescription(ConnectV)
 	time.Sleep(5 * time.Second)
 }
-func (t *TaskWorker) DeleteVMTest(context.Context) {
+func (t *TaskWorker) DeleteVMTest() {
 	t.workDescription(DeleteV)
 	time.Sleep(5 * time.Second)
 }
-func (t *TaskWorker) GetStatusTest(context.Context) {
+func (t *TaskWorker) GetStatusTest() {
 	t.workDescription(DeleteV)
 	time.Sleep(5 * time.Second)
 }

@@ -1,12 +1,12 @@
 package WorkerCont
 
 import (
-	"context"
+	//"context"
 	"fmt"
 	"time"
 )
 
-//각각의 worker노드와 통신하기 위한 클라이언트 서버
+// 각각의 worker노드와 통신하기 위한 클라이언트 서버
 type functionName int32
 
 const NumOfTaskHandler = 5
@@ -34,47 +34,48 @@ func InitWorkers(pool *TaskHandler) {
 			//스레드 관련 내용인거 같은데 뭔소리인지 모르겠음.
 			//내생각엔 스레드를 처리하는 큐? 느낌인거 같음.
 
-
-			workerNum:   i, // 코어의 고유 번호
+			workerNum: i, // 코어의 고유 번호
 		}
-		go pool.TaskHandlersList[i].StartWorking()//????
-
+		go pool.TaskHandlersList[i].StartWorking() //????
 	}
 }
 
 func (t *TaskWorker) StartWorking() {
+
 	for {
-		ctx := context.Background()
 		select {
 		case work, ok := <-t.workLoads:
-			{
-				if !ok {
-					fmt.Println("channel closed")
-					return
-				} else {
-					switch work.FunctionName {
-					case CreateV:
-						t.CreateVMTest(ctx)
-						t.tasksLength--
-					case UpdateStat:
-						t.UpdateStatusTest(ctx)
-						t.tasksLength--
-					case ConnectV:
-						t.ConnectVMTest(ctx)
-						t.tasksLength--
-					case DeleteV:
-						t.DeleteVMTest(ctx)
-						t.tasksLength--
-					case GetStatus:
-						t.GetStatus(ctx, work)
-						t.tasksLength--
-					default:
-						fmt.Printf("undefined task")
-					}
-				}
+			if !ok {
+				fmt.Println("channel closed")
+				return
 			}
+
+			// 출력 동기화
+			t.workDescription(work.FunctionName)
+
+			// 작업 수행
+			switch work.FunctionName {
+			case CreateV:
+				if taskControl, ok := work.TaskSpecific.(*TaskControlCreateVM); ok {
+					t.CreateVM(taskControl)
+				}
+			case UpdateStat:
+				t.UpdateStatusTest()
+			case ConnectV:
+				t.ConnectVMTest()
+			case DeleteV:
+				if taskControl, ok := work.TaskSpecific.(*TaskControlDeleteVM); ok {
+					fmt.Println("2222")
+					t.DeleteVM(taskControl)
+					fmt.Println("3333")
+				}
+			case GetStatus:
+				t.GetStatus(work)
+			default:
+				fmt.Printf("undefined task")
+			}
+
 		default:
-			// fmt.Println("work Done, waiting")
 			time.Sleep(time.Microsecond * 300)
 		}
 	}

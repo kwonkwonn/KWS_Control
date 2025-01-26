@@ -9,6 +9,3 @@ const (
 	StatusUnallocated
 	StatusNotActive
 )
-
-type VMStatusNeeded struct {
-}

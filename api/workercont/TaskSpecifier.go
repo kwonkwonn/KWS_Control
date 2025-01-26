@@ -12,10 +12,37 @@ type GetStatusParam struct {
 	UUID string `json:"UUID"`
 }
 
+type DeletevmParam struct {
+	UUID       string `json:"UUID"`
+	DeleteType int    `json:"DeleteType"`
+}
+
 type CreateVMParam struct {
-	UUID string `json:"UUID"`
-	RAM  int    `json:"RAM"`
-	CPU  int    `json:"CPU"`
+	DomType string     `json:"domType"`
+	DomName string     `json:"domName"`
+	Users   []UserInfo `json:"users"`
+	UUID    string     `json:"UUID"`
+	OS      string     `json:"os"`
+	HWInfo  HWInfo     `json:"HWInfo"`
+	Network network
+	SSH     string `json:"ssh"`
+	Method  int    `json:"method"`
+}
+
+type UserInfo struct {
+	UserName     string `json:"name"`
+	UserGroup    string `json:"groups"`
+	UserPassword string `json:"passWord"`
+}
+
+type HWInfo struct {
+	CPU    int `json:"cpu"`
+	Memory int `json:"memory"`
+}
+
+type network struct {
+	Ips     []string
+	NetType int
 }
 
 //parameters for each functions
@@ -33,15 +60,21 @@ type TaskWorker struct {
 
 type TaskHandler struct {
 	TaskHandlersList []*TaskWorker // 현재 돌아가고 있는 스레드를 가리키는 포인터
-	workingIndex     int // 현재 돌아가고 있는 스레드의 갯수
+	workingIndex     int           // 현재 돌아가고 있는 스레드의 갯수
 } //테스크 임베딩, 필드 추가 필요
 
 type TaskControlCreateVM struct {
-	ResultChann chan TaskExecutionResult
-	UUID        vms.UUID
-	RAM         int
-	CPU         int
+	ResultChan chan string
+	UUID       vms.UUID
+	Param      *CreateVMParam
+	Vms        *vms.ControlInfra
 	//추가 필요
+}
+
+type TaskControlDeleteVM struct {
+	ResultChan chan string
+	UUID       vms.UUID
+	Param      *DeletevmParam
 }
 
 type TaskControlGetStatus struct {
@@ -49,18 +82,22 @@ type TaskControlGetStatus struct {
 	UUID       vms.UUID
 }
 
+type TaskExecutionResult struct {
+	IsSuccess   bool
+	InVMContext vms.VMInfo
+}
+
 type TaskJustifier interface {
 	TaskUnparsor(r *http.Request) error
 }
 
-//functions for each structures, needed for interface
+// functions for each structures, needed for interface
 func (t *TaskControlCreateVM) TaskUnparsor(r *http.Request) error {
 	var param CreateVMParam
 	if err := json.NewDecoder(r.Body).Decode(&param); err != nil {
 		return err
 	}
-	t.RAM = param.RAM
-	t.CPU = param.CPU
+	t.Param = &param
 	return nil
 }
 
@@ -73,7 +110,11 @@ func (t *TaskControlGetStatus) TaskUnparsor(r *http.Request) error {
 	return nil
 }
 
-type TaskExecutionResult struct {
-	IsSuccess   bool
-	InVMContext vms.VMInfo
+func (t *TaskControlDeleteVM) TaskUnparsor(r *http.Request) error {
+	var param DeletevmParam
+	if err := json.NewDecoder(r.Body).Decode(&param); err != nil {
+		//에러 정의 필요
+		return err
+	}
+	return nil
 }

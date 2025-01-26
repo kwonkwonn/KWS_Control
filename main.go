@@ -3,6 +3,7 @@ package main
 import (
 	//"fmt"
 	_ "os"
+	//"sync"
 
 	api "github.com/easy-cloud-Knet/KWS_Control/api/server"
 	WorkerConn "github.com/easy-cloud-Knet/KWS_Control/api/workercont"
@@ -13,11 +14,12 @@ func main() {
 	//fmt.Println("hellot")
 	//var wg sync.WaitGroup
 	var TaskHandlersPool WorkerConn.TaskHandler
-	WorkerConn.InitWorkers(&TaskHandlersPool)//스레드를 초기화하는 함수
-	contextStruct := vms.InitializeDevices()//VM을 정의하는 함수
-	//wg.Add()
+	WorkerConn.InitWorkers(&TaskHandlersPool) //스레드를 초기화하는 함수
+	contextStruct := vms.InitializeDevices()  //VM을 정의하는 함수
+
 	//api.Lock()
 	go func() {
+
 		err := api.Server(8080, &TaskHandlersPool, &contextStruct)
 		//wg.Wait()
 		//api.Unlock()
@@ -25,8 +27,9 @@ func main() {
 			panic(err)
 		}
 	}()
+
 	//api.Done()
-	WorkerConn.PseudoRequestSender(&TaskHandlersPool)
+	//WorkerConn.PseudoRequestSender(&TaskHandlersPool)
 
 	select {}
 }
