@@ -1,6 +1,7 @@
 package vms
 
 import (
+	"context"
 	"fmt"
 
 	_ "gopkg.in/yaml.v3"
@@ -26,10 +27,6 @@ func InitializeDevices() ControlInfra {
 
 	//COM1과 COM2를 initialContext.Computers에 정의
 	initialContext.Cores = append(initialContext.Cores, Core1, Core2)
-	fmt.Println("hellot1")
-
-	//initialContext.UpdateList()//???????
-	fmt.Println("hellot2")
 
 	return initialContext
 	// go HeartBeatSensor(InfraCon.Computers)
