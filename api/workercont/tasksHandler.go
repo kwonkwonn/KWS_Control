@@ -15,8 +15,6 @@ func (t *TaskWorker) UpdateStatus() {
 }
 func (t *TaskWorker) CreateVM(CreateVM *TaskControlCreateVM) {
 	fmt.Printf("VM Name: %s\n", CreateVM.Param.DomName)
-	CreateVM.Param.Network.NetType = 0
-	CreateVM.Param.Network.Ips = []string{"10.5.13.8", "10.5.21.8"}
 
 	// JSON 변환
 	jsonData, err := json.Marshal(CreateVM.Param)

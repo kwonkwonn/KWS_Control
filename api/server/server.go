@@ -3,13 +3,12 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-
 	//"io"
 	"net/http"
 	"strconv"
 
 	WorkerCont "github.com/easy-cloud-Knet/KWS_Control/api/workercont"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 	vms "github.com/easy-cloud-Knet/KWS_Control/vm"
 )
 
@@ -46,15 +45,13 @@ func Server(portNum int, taskPool *WorkerCont.TaskHandler, contextStruct *vms.Co
 			return
 		}
 
-		b, err := io.ReadAll(r.Body)
+		param, err := util.UnmarshalBodyAndClose[WorkerCont.CreateVMParam](r.Body)
 		if err != nil {
-			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			http.Error(w, "Failed to read or parse JSON", http.StatusBadRequest)
 			return
 		}
-		var param WorkerCont.CreateVMParam
-		err = json.Unmarshal(b, &param)
 
-		task := WorkerCont.NewCreateVMTask(nil, param)
+		task := WorkerCont.NewCreateVMTask(&vms.Core{IP: "127.0.0.1", Port: 8080}, param) // TODO: core assignment
 		resp, err := task.Await()
 		if err != nil {
 			http.Error(w, "Failed to create VM", http.StatusInternalServerError)

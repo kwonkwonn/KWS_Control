@@ -18,15 +18,16 @@ type DeletevmParam struct {
 }
 
 type CreateVMParam struct {
-	DomType string     `json:"domType"`
-	DomName string     `json:"domName"`
-	Users   []UserInfo `json:"users"`
-	UUID    string     `json:"UUID"`
-	OS      string     `json:"os"`
-	HWInfo  HWInfo     `json:"HWInfo"`
-	Network network
-	SSH     string `json:"ssh"`
-	Method  int    `json:"method"`
+	DomType     string     `json:"domType"`
+	DomName     string     `json:"domName"`
+	UUID        string     `json:"uuid"`
+	OS          string     `json:"os"`
+	NetworkType string     `json:"netType"`
+	Memory      int        `json:"memory"`
+	CPU         int        `json:"cpu"`
+	IPs         []string   `json:"ips"`
+	Method      uint       `json:"method"`
+	Users       []UserInfo `json:"users"`
 }
 
 type UserInfo struct {

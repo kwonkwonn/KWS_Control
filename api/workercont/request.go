@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 type CoreRequestTask[P any, R any] struct {
@@ -24,7 +25,7 @@ func (t *CoreRequestTask[P, R]) Await() (body R, err error) {
 
 	requestUrl := url.URL{
 		Scheme: "http",
-		Host:   t.Core.IP,
+		Host:   t.Core.IP + ":" + strconv.Itoa(t.Core.Port),
 		Path:   t.Endpoint,
 	}
 
@@ -52,7 +53,7 @@ func (t *CoreRequestTask[P, R]) Await() (body R, err error) {
 func NewCreateVMTask(core *vms.Core, param CreateVMParam) CoreRequestTask[CreateVMParam, string] {
 	return CoreRequestTask[CreateVMParam, string]{
 		Core:     core,
-		Endpoint: "/CreateVM",
+		Endpoint: "/createVM",
 		Request:  param,
 	}
 }
