@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	//"fmt"
-	//"io"
 	"net/http"
 	"strconv"
 
@@ -88,7 +86,8 @@ func Server(portNum int, taskPool *WorkerCont.TaskHandler, contextStruct *vms.Co
 			})
 			return
 		}
-		task := WorkerCont.NewCreateVMTask(&vms.Core{IP: "223.194.20.119", Port: 28779}, param) // TODO: core assignment
+		core := contextStruct.SelectCoreForNewVM(param.HWInfo.Memory, param.HWInfo.CPU)
+		task := WorkerCont.NewCreateVMTask(core, param)
 		resp, err := task.Await()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
