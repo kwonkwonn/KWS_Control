@@ -14,7 +14,10 @@ func main() {
 
 	var TaskHandlersPool WorkerConn.TaskHandler
 	WorkerConn.InitWorkers(&TaskHandlersPool)
-	contextStruct := vms.InitializeDevices()
+	contextStruct, err := vms.InitializeDevices()
+	if err != nil {
+		panic(err)
+	}
 
 	go func() {
 		err := api.Server(8080, &TaskHandlersPool, &contextStruct)
