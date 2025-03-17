@@ -1,8 +1,11 @@
 package vms
 
 import (
+	"fmt"
 	"github.com/easy-cloud-Knet/KWS_Control/config"
 	_ "gopkg.in/yaml.v3"
+	"strconv"
+	"strings"
 )
 
 func InitializeDevices() (ControlInfra, error) {
@@ -17,20 +20,24 @@ func InitializeDevices() (ControlInfra, error) {
 		AliveVM:    []*VMInfo{}, //현재 가동중인 VM의 정보
 		VMLocation: map[UUID]*Core{},
 	}
-	// config 파일이나 데이터베이스에서 읽어와야 함.
-	// 현재 연결되어 있는 컴퓨터들의 간단한 정보,
 
-	Core1 := Core{
-		IP:      "192.168.64.5",
-		IsAlive: false,
-	}
-	Core2 := Core{
-		IP:      "192.168.64.6",
-		IsAlive: false,
-	}
+	for _, core := range c.Cores {
+		addr := strings.Split(core, ":")
+		if len(addr) != 2 {
+			panic("core address should be in format ip:port")
+		}
 
-	//COM1과 COM2를 initialContext.Computers에 정의
-	initialContext.Cores = append(initialContext.Cores, Core1, Core2)
+		port, err := strconv.Atoi(addr[1])
+		if err != nil {
+			_ = fmt.Errorf("error converting port number %w", err)
+			return ControlInfra{}, err
+		}
+		initialContext.Cores = append(initialContext.Cores, Core{
+			IP:      addr[0],
+			Port:    port,
+			IsAlive: true,
+		})
+	}
 
 	return initialContext, nil
 	// go HeartBeatSensor(InfraCon.Computers)
