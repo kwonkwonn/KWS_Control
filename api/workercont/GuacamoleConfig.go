@@ -5,29 +5,31 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"math/rand"
+
+	//"math/rand"
 	"strconv"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // 도커 올릴때 확인
 )
 
-func GuacamoleConfig(UUID string, Ip string, PrivateKey string) {
+func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string) {
 	// MySQL 연결 정보 수정 (내부 IP 사용)
-	println("1111")
-	db, err := sql.Open("mysql", "")
+	fmt.Println()
+	db, err := sql.Open("mysql", "root:3c0GBUDtUBhyqHd@tcp(223.194.20.119:25118)/guacamole_db")
 	if err != nil {
 		log.Fatal("DB 연결 실패:", err)
 	}
 	defer db.Close()
 
 	// 사용자 생성
-	userID := UUID
-	println(userID)
-	userPass := rand.Intn(10000000) + 1
-	salt := "20250307"
+	//userID := UUID
+	//println(userID)
+	userPass := 11111
+	fmt.Println(userPass)
+	//salt := "20250307"
 	println("4444")
-	passwordHash := fmt.Sprintf("%x", sha256Sum(strconv.Itoa(userPass)+salt))
+	passwordHash := fmt.Sprintf("%x", sha256Sum(strconv.Itoa(userPass)))
 	fmt.Println("passwordHash:", passwordHash)
 	println("5555")
 
@@ -43,9 +45,9 @@ func GuacamoleConfig(UUID string, Ip string, PrivateKey string) {
 		log.Fatal("Entity ID 조회 실패:", err)
 	}
 	_, err = db.Exec(`
-      INSERT INTO guacamole_user (entity_id, full_name, password_hash, password_salt, password_date)
-      VALUES (?, ?, UNHEX(?), ?, ?)
-   `, entityID, userID, passwordHash, salt, time.Now())
+      INSERT INTO guacamole_user (entity_id, full_name, password_hash, password_date)
+      VALUES (?, ?, UNHEX(?), ?)
+   `, entityID, Username, passwordHash, time.Now())
 	println("6666")
 	if err != nil {
 		log.Fatal("User 생성 실패:", err)
@@ -68,12 +70,10 @@ func GuacamoleConfig(UUID string, Ip string, PrivateKey string) {
 
 	// Connection Parameter 설정
 	params := map[string]string{
-		"hostname": Ip, // SSH 접속할 VM의 IP
-		"port":     "22",
-		"username": userID,
-		"private-key": fmt.Sprintf(`-----BEGIN OPENSSH PRIVATE KEY-----
-	%s
-	-----END OPENSSH PRIVATE KEY-----`, PrivateKey),
+		"hostname":    Ip, // SSH 접속할 VM의 IP
+		"port":        "22",
+		"username":    Username,
+		"private-key": PrivateKey,
 	}
 
 	for name, value := range params {

@@ -12,32 +12,32 @@ import (
 	vms "github.com/easy-cloud-Knet/KWS_Control/vm"
 )
 
-func Server(portNum int, taskPool *WorkerCont.TaskHandler, contextStruct *vms.ControlInfra) error {
+func Server(portNum int, contextStruct *vms.ControlInfra) error {
 	// main server와 통신하기 위한 http 서버
 	// gin.DefaultWriter = io.Discard
-	http.HandleFunc("Get /getStatus", func(w http.ResponseWriter, r *http.Request) {
+	// http.HandleFunc("Get /getStatus", func(w http.ResponsseWriter, r *http.Request) {
 
-		if r.Method != http.MethodGet {
-			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-			return
-		}
-		workerControl := &WorkerCont.TaskControlGetStatus{
-			ResultChan: make(chan WorkerCont.TaskExecutionResult),
-		}
-		resultChannel := workerControl.ResultChan
-		defer close(resultChannel)
-		workerControl.TaskUnparsor(r)
+	// 	if r.Method != http.MethodGet {
+	// 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+	// 		return
+	// 	}
+	// 	workerControl := &WorkerCont.TaskControlGetStatus{
+	// 		ResultChan: make(chan WorkerCont.TaskExecutionResult),
+	// 	}
+	// 	resultChannel := workerControl.ResultChan
+	// 	defer close(resultChannel)
+	// 	workerControl.TaskUnparsor(r)
 
-		newTask := &WorkerCont.Task{
-			FunctionName: WorkerCont.GetStatus,
-			TaskSpecific: workerControl,
-		}
+	// 	newTask := &WorkerCont.Task{
+	// 		FunctionName: WorkerCont.GetStatus,
+	// 		TaskSpecific: workerControl,
+	// 	}
 
-		taskPool.WorkerAllocate(newTask)
-		result := <-resultChannel
-		encoder := json.NewEncoder(w)
-		encoder.Encode(result)
-	})
+	// 	taskPool.WorkerAllocate(newTask)
+	// 	result := <-resultChannel
+	// 	encoder := json.NewEncoder(w)
+	// 	encoder.Encode(result)
+	// })
 
 	http.HandleFunc("/CreateVM", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost { // POST로 요청 제한
@@ -55,6 +55,10 @@ func Server(portNum int, taskPool *WorkerCont.TaskHandler, contextStruct *vms.Co
 			})
 			return
 		}
+		_, err = contextStruct.AssignInternalAddress()
+		param.Network.Ips = []string{"10.5.15.10"}
+		fmt.Println(param.Network.Ips)
+		excludeFields := map[string]bool{"Network": true}
 		//var privateKey string
 		for i := range param.Users {
 			privateKey, publicKey, err := WorkerCont.SshKeygen()
@@ -73,10 +77,10 @@ func Server(portNum int, taskPool *WorkerCont.TaskHandler, contextStruct *vms.Co
 			} else {
 				param.Users[i].Ssh = append(param.Users[i].Ssh, publicKey)
 			}
-			WorkerCont.SshPrivateStore(param.UUID+"_"+strconv.Itoa(i), privateKey)
+			//WorkerCont.SshPrivateStore(param.UUID+"_"+strconv.Itoa(i), privateKey)
+			WorkerCont.GuacamoleConfig(param.Users[0].UserName, param.UUID, param.Network.Ips[0], privateKey)
 		}
 
-		ip, err := contextStruct.AssignInternalAddress()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(WorkerCont.ControlError{
@@ -86,10 +90,8 @@ func Server(portNum int, taskPool *WorkerCont.TaskHandler, contextStruct *vms.Co
 			return
 		}
 
-		param.Network.Ips = []string{ip.String()}
-		excludeFields := map[string]bool{"Network": true}
 		err = WorkerCont.ValidateStruct(param, excludeFields)
-		//WorkerCont.GuacamoleConfig(param.UUID, param.Network.Ips[0], "1111")
+
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			println("Control : Invalid parameters provided")
@@ -133,38 +135,38 @@ func Server(portNum int, taskPool *WorkerCont.TaskHandler, contextStruct *vms.Co
 		})
 	})
 
-	http.HandleFunc("/DeleteVM", func(w http.ResponseWriter, r *http.Request) {
-		param, err := util.UnmarshalBodyAndClose[WorkerCont.DeletevmParam](r.Body)
-		fmt.Printf("%v\n", param)
-		if err != nil {
-			http.Error(w, "Failed to read or parse JSON", http.StatusBadRequest)
-			return
-		}
-		task := WorkerCont.NewDeleteVMTask(&vms.Core{IP: "223.194.20.119", Port: 28779}, param)
-		resp, err := task.Await()
-		if err != nil {
-			http.Error(w, "Failed to Delete VM", http.StatusInternalServerError)
-			return
-		}
-		//task.errorhandler()
+	// http.HandleFunc("/DeleteVM", func(w http.ResponseWriter, r *http.Request) {
+	// 	param, err := util.UnmarshalBodyAndClose[WorkerCont.DeletevmParam](r.Body)
+	// 	fmt.Printf("%v\n", param)
+	// 	if err != nil {
+	// 		http.Error(w, "Failed to read or parse JSON", http.StatusBadRequest)
+	// 		return
+	// 	}
+	// 	task := WorkerCont.NewDeleteVMTask(&vms.Core{IP: "223.194.20.119", Port: 28779}, param)
+	// 	resp, err := task.Await()
+	// 	if err != nil {
+	// 		http.Error(w, "Failed to Delete VM", http.StatusInternalServerError)
+	// 		return
+	// 	}
+	// 	//task.errorhandler()
 
-		encoder := json.NewEncoder(w)
-		if err = encoder.Encode(resp); err != nil {
-			http.Error(w, "Failed to encode result", http.StatusInternalServerError)
-			return
-		}
+	// 	encoder := json.NewEncoder(w)
+	// 	if err = encoder.Encode(resp); err != nil {
+	// 		http.Error(w, "Failed to encode result", http.StatusInternalServerError)
+	// 		return
+	// 	}
 
-	})
-	http.HandleFunc("GET /ConnectVM", func(w http.ResponseWriter, b *http.Request) {
-		taskPool.WorkerAllocate(&WorkerCont.Task{
-			FunctionName: WorkerCont.ConnectV,
-		})
-	})
-	http.HandleFunc("GET /CheckVMHealth", func(w http.ResponseWriter, b *http.Request) {
-		taskPool.WorkerAllocate(&WorkerCont.Task{
-			FunctionName: WorkerCont.UpdateStat,
-		})
-	})
+	// })
+	// http.HandleFunc("GET /ConnectVM", func(w http.ResponseWriter, b *http.Request) {
+	// 	taskPool.WorkerAllocate(&WorkerCont.Task{
+	// 		FunctionName: WorkerCont.ConnectV,
+	// 	})
+	// })
+	// http.HandleFunc("GET /CheckVMHealth", func(w http.ResponseWriter, b *http.Request) {
+	// 	taskPool.WorkerAllocate(&WorkerCont.Task{
+	// 		FunctionName: WorkerCont.UpdateStat,
+	// 	})
+	// })
 
 	err := http.ListenAndServe(":"+strconv.Itoa(portNum), nil)
 	if err != nil {
