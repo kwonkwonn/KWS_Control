@@ -1,0 +1,96 @@
+package service
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
+	"log"
+
+	vms "github.com/easy-cloud-Knet/KWS_Control/structure"
+	"github.com/google/uuid"
+)
+
+type CreateVMRequest struct {
+	Memory uint16 `json:"memory"` // VM Memory (GiB)
+	Cpu    uint8  `json:"cpu"`    // VM CPU Logical Core Num (cores)
+	Disk   uint16 `json:"disk"`   // VM Disk (GiB)
+}
+
+// 새 VM 만드는 무언가.
+// 자원 많이 남은 코어를 찾고, 리소스 할당 업데이트, ControlInfra 상태 업데이트.
+func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlInfra) error {
+	var req CreateVMRequest
+	defer r.Body.Close()	// defer << 에러가 발생해도 body가 닫히도록 보장.
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("err req body parsing: %v", err)
+		return errors.New("err req body parsing: " + err.Error())
+	}
+
+	log.Printf("func CreateVM() memory=%dGiB, cpu=%d, disk=%dGiB", req.Memory, req.Cpu, req.Disk)
+
+	// err = validateCreateVMRequest(req)
+
+	// guacamole 부분 필요
+
+
+	// 적합한 코어 찾기
+	var selectedCore *vms.Core = nil
+	selectedCoreIndex := -1
+	for i := range contextStruct.Cores {
+		core := &contextStruct.Cores[i]
+		log.Printf("core %s checking: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d, IsAlive=%t", core.IP, core.FreeMemory, core.FreeCPU, core.FreeDisk, core.IsAlive)
+		if core.IsAlive && core.FreeMemory >= req.Memory && core.FreeCPU >= req.Cpu && core.FreeDisk >= req.Disk {
+			selectedCore = core
+			selectedCoreIndex = i
+			log.Printf("core found: %s", selectedCore.IP)
+			break
+		}
+	}
+
+	if selectedCore == nil {
+		log.Println("selectedCore == nil")
+		return errors.New("selectedCore == nil")
+	}
+
+
+	// vm uuid 생성
+	newUUID := vms.UUID(uuid.NewString())
+	log.Printf("new UUID: %s", newUUID)
+
+	// ip, err := contextStruct.AssignInternalAddress()
+	vmIP := "10.0.0.0"  // 할당된 ip 받아오도록 하는 거 필요.
+
+	newVM := &vms.VMInfo{
+		UUID:   newUUID,
+		Memory: req.Memory,
+		Cpu:    req.Cpu,
+		Disk:   req.Disk,
+		IP_VM:  vmIP,
+	}
+
+	// selected core 상태 업데이트
+	if selectedCore.VMInfoIdx == nil {
+		selectedCore.VMInfoIdx = make(map[vms.UUID]*vms.VMInfo)
+	}
+	selectedCore.VMInfoIdx[newUUID] = newVM
+	selectedCore.FreeMemory -= req.Memory
+	selectedCore.FreeCPU -= req.Cpu
+	selectedCore.FreeDisk -= req.Disk
+	log.Printf("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
+
+	// ControlInfra global 상태 업데이트
+	if contextStruct.VMLocation == nil {
+		contextStruct.VMLocation = make(map[vms.UUID]*vms.Core)
+	}
+	contextStruct.VMLocation[newUUID] = &contextStruct.Cores[selectedCoreIndex]
+	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
+	log.Printf("VM %s added to ControlInfra", newUUID)
+
+
+	// request.go 부분 필요
+
+	log.Printf("UUID %s CreateVM request success on core %s", newUUID, selectedCore.IP)
+	return nil
+}
