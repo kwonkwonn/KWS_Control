@@ -3,9 +3,24 @@ package main
 import (
 	"fmt"
 	_ "os"
+
+	"github.com/easy-cloud-Knet/KWS_Control/api"
+	"github.com/easy-cloud-Knet/KWS_Control/startup"
 )
 
 func main() {
-	fmt.Println("hello")
+	fmt.Println("hellot")
 
+	contextStruct, err := startup.InitializeDevices("./startup/vm_info.json")
+	if err != nil {
+		panic(err)
+	}
+
+	go func() {
+		err := api.Server(8081, contextStruct)
+		if err != nil {
+			panic(err)
+		}
+	}()
+	select {}
 }
