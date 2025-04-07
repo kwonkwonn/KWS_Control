@@ -17,7 +17,7 @@ func main() {
 	}
 
 	go func() {
-		err := api.Server(8081, &contextStruct)
+		err := api.Server(contextStruct.Config.Port, &contextStruct)
 		if err != nil {
 			panic(err)
 		}

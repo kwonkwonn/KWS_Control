@@ -5,6 +5,7 @@ type UUID string
 type Config struct {
 	VmInternalSubnets []string `yaml:"vm_internal_subnets"`
 	Cores             []string `yaml:"cores"`
+	Port              int      `yaml:"port"`
 }
 
 type ControlInfra struct {
@@ -16,7 +17,6 @@ type ControlInfra struct {
 	// => 근데 이거 자료형을 어떤걸 써야할지 모르겠어서 일단 이렇게 map[UUID]*Core로 해놓은거지 2차원 벡터로 해도 무방할거 같습니다.
 	// => 이렇게 한 이유는 이전 버전에서 VMPool map[UUID]*VM 이렇게 해놓았던데 이렇게 하면 VM이 많아졌을 때 너무 오래 걸릴거 같아서 IP를 기반으로 먼저 찾고 해당 core로 넘어가서 처리하면 더 좋지않을까? 생각했어요.
 }
-
 
 // memory: GiB
 // disk: GiB
@@ -34,15 +34,15 @@ type Core struct {
 }
 
 type CoreInfo struct {
-	Memory uint16                // 코어의 전체 메모리 GiB
-	Cpu    uint8                 // 코어의 전체 CPU 논리 코어 수
-	Disk   uint16                // 코어의 전체 디스크 GiB
+	Memory uint16 // 코어의 전체 메모리 GiB
+	Cpu    uint8  // 코어의 전체 CPU 논리 코어 수
+	Disk   uint16 // 코어의 전체 디스크 GiB
 }
 
-type VMInfo struct { 
+type VMInfo struct {
 	IP_VM  string
 	UUID   UUID
-	Memory uint16                // VM의 메모리 GiB
-	Cpu    uint8                 // VM의 CPU 논리 코어 수
-	Disk   uint16                // VM의 디스크 GiB
+	Memory uint16 // VM의 메모리 GiB
+	Cpu    uint8  // VM의 CPU 논리 코어 수
+	Disk   uint16 // VM의 디스크 GiB
 }
