@@ -1,54 +1,101 @@
 package startup
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
+	"github.com/easy-cloud-Knet/KWS_Control/request"
+	"github.com/easy-cloud-Knet/KWS_Control/structure"
+	"golang.org/x/sync/errgroup"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/easy-cloud-Knet/KWS_Control/structure"
-
 	_ "gopkg.in/yaml.v3"
 )
 
-func InitializeDevices(filename string) (*structure.ControlInfra, error) {
-	file, err := os.Open(filename)
+func Initialize(dataPath, configPath string) (structure.ControlInfra, error) {
+	b, err := os.ReadFile(dataPath)
 	if err != nil {
-		return &structure.ControlInfra{}, fmt.Errorf("failed to open file: %v", err)
+		return structure.ControlInfra{}, err
 	}
-	defer file.Close()
-	data, err := io.ReadAll(file)
-	if err != nil {
-		return &structure.ControlInfra{}, fmt.Errorf("failed to read file: %v", err)
-	}
-	
+
 	var infra structure.ControlInfra
+	if err := json.Unmarshal(b, &infra); err != nil {
+		return structure.ControlInfra{}, fmt.Errorf("failed to parse JSON: %v", err)
+	}
+
 	infra.VMLocation = make(map[structure.UUID]*structure.Core)
-	if err := json.Unmarshal(data, &infra); err != nil {
-		return &structure.ControlInfra{}, fmt.Errorf("failed to parse JSON: %v", err)
-	}
-	for i := range infra.Cores { // 인덱스로 접근하여 원본 데이터 사용
+	for i := range infra.Cores {
 		for vmUUID := range infra.Cores[i].VMInfoIdx {
-			infra.VMLocation[vmUUID] = &infra.Cores[i] // 원본 Core를 참조
-		}
-		
-		addr := strings.Split(infra.Cores[i].IP+":"+strconv.Itoa(int(infra.Cores[i].Port)), ":")
-		if len(addr) != 2 {
-			panic("core address should be in format ip:port")
+			infra.VMLocation[vmUUID] = &infra.Cores[i]
 		}
 
-		port, err := strconv.Atoi(addr[1])
-		if err != nil {
-			_ = fmt.Errorf("error converting port number %w", err)
-			return &structure.ControlInfra{}, err
-		}
-		
-		infra.Cores[i].IP = addr[0]
-		infra.Cores[i].Port = uint16(port)
-		infra.Cores[i].IsAlive = true
+		infra.Cores[i].IsAlive = false
 	}
 
-	return &infra, nil
+	// config에 설정된 코어에 대해서 정보 업데이트
+	config, err := readConfig(configPath)
+	if err != nil {
+		return structure.ControlInfra{}, err
+	}
+
+	g, ctx := errgroup.WithContext(context.Background())
+	for _, coreAddress := range config.Cores {
+		parts := strings.Split(coreAddress, ":")
+		ip := parts[0]
+		port, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return structure.ControlInfra{}, fmt.Errorf("error converting port number from %s: %w", coreAddress, err)
+		}
+
+		core := findCore(infra.Cores, ip, uint16(port))
+		if core == nil {
+			newCore := structure.Core{
+				IP:      ip,
+				Port:    uint16(port),
+				IsAlive: true,
+			}
+			infra.Cores = append(infra.Cores, newCore)
+
+			core = &newCore
+		}
+
+		client := request.NewCoreClient(core)
+		g.Go(func() error {
+			cpuResp, err := client.GetCoreMachineCpuInfo(ctx)
+			if err != nil {
+				return err
+			}
+			memResp, err := client.GetCoreMachineMemoryInfo(ctx)
+			if err != nil {
+				return err
+			}
+			diskResp, err := client.GetCoreMachineDiskInfo(ctx)
+			if err != nil {
+				return err
+			}
+
+			core.CoreInfoIdx.Cpu = uint8(cpuResp.Idle) // TODO: 단위 맞추기
+			core.CoreInfoIdx.Memory = uint16(memResp.Available)
+			core.CoreInfoIdx.Disk = uint16(diskResp.Free)
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return structure.ControlInfra{}, fmt.Errorf("failed to get core info: %w", err)
+	}
+
+	return infra, nil
+}
+
+func findCore(cores []structure.Core, ip string, port uint16) *structure.Core {
+	for _, c := range cores {
+		if c.IP == ip && c.Port == port {
+			return &c
+		}
+	}
+	return nil
 }

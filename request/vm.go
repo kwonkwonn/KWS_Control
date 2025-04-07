@@ -2,6 +2,7 @@ package request
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -26,7 +27,7 @@ func NewCoreClient(core *structure.Core) *CoreClient {
 	}
 }
 
-func (c *CoreClient) doRequest(method, path string, requestBody interface{}, responseBody interface{}) error {
+func (c *CoreClient) doRequest(context context.Context, method, path string, requestBody interface{}, responseBody interface{}) error {
 	var reqBodyReader io.Reader
 	if requestBody != nil {
 		jsonData, err := json.Marshal(requestBody)
@@ -36,7 +37,7 @@ func (c *CoreClient) doRequest(method, path string, requestBody interface{}, res
 		reqBodyReader = bytes.NewBuffer(jsonData)
 	}
 
-	req, err := http.NewRequest(method, c.baseURL+path, reqBodyReader)
+	req, err := http.NewRequestWithContext(context, method, c.baseURL+path, reqBodyReader)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -49,6 +50,7 @@ func (c *CoreClient) doRequest(method, path string, requestBody interface{}, res
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
+	//goland:noinspection GoUnhandledErrorResult
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -65,11 +67,44 @@ func (c *CoreClient) doRequest(method, path string, requestBody interface{}, res
 	return nil
 }
 
-func (c *CoreClient) CreateVM(req model.CreateVMRequest) (model.CreateVMResponse, error) {
+func (c *CoreClient) CreateVM(context context.Context, req model.CreateVMRequest) (model.CreateVMResponse, error) {
 	var response model.CreateVMResponse
-	err := c.doRequest(http.MethodPost, "/createVm", req, &response)
+	err := c.doRequest(context, http.MethodPost, "/createVm", req, &response)
 	if err != nil {
 		return model.CreateVMResponse{}, err
+	}
+	return response, nil
+}
+
+func (c *CoreClient) GetCoreMachineCpuInfo(context context.Context) (model.CoreMachineCpuInfoResponse, error) {
+	var response model.CoreMachineCpuInfoResponse
+	err := c.doRequest(context, http.MethodPost, "/getStatusHost", model.GetMachineStatusRequest{
+		HostDataType: model.CpuInfo,
+	}, &response)
+	if err != nil {
+		return model.CoreMachineCpuInfoResponse{}, err
+	}
+	return response, nil
+}
+
+func (c *CoreClient) GetCoreMachineDiskInfo(context context.Context) (model.CoreMachineDiskInfoResponse, error) {
+	var response model.CoreMachineDiskInfoResponse
+	err := c.doRequest(context, http.MethodPost, "/getStatusHost", model.GetMachineStatusRequest{
+		HostDataType: model.DiskInfoHi,
+	}, &response)
+	if err != nil {
+		return model.CoreMachineDiskInfoResponse{}, err
+	}
+	return response, nil
+}
+
+func (c *CoreClient) GetCoreMachineMemoryInfo(context context.Context) (model.CoreMachineMemoryInfoResponse, error) {
+	var response model.CoreMachineMemoryInfoResponse
+	err := c.doRequest(context, http.MethodPost, "/getStatusHost", model.GetMachineStatusRequest{
+		HostDataType: model.MemInfo,
+	}, &response)
+	if err != nil {
+		return model.CoreMachineMemoryInfoResponse{}, err
 	}
 	return response, nil
 }

@@ -11,13 +11,13 @@ import (
 func main() {
 	fmt.Println("hellot")
 
-	contextStruct, err := startup.InitializeDevices("./startup/vm_info.json")
+	contextStruct, err := startup.Initialize("./startup/vm_info.json", "config.yaml")
 	if err != nil {
 		panic(err)
 	}
 
 	go func() {
-		err := api.Server(8081, contextStruct)
+		err := api.Server(8081, &contextStruct)
 		if err != nil {
 			panic(err)
 		}
