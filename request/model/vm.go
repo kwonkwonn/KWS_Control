@@ -5,8 +5,9 @@ import (
 )
 
 type HardwareInfo struct {
-	CPU    int `json:"cpu"`
-	Memory int `json:"memory"`
+	CPU    uint32 `json:"cpu"`
+	Memory uint32 `json:"memory"` // MiB
+	Disk   uint32 `json:"disk"`   // MiB
 }
 
 type UserInfoVM struct {

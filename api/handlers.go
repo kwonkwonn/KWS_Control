@@ -8,10 +8,10 @@ import (
 )
 
 type handlerContext struct {
-	context *vms.ControlInfra
+	context *vms.ControlContext
 }
 
-func Server(portNum int, contextStruct *vms.ControlInfra) error {
+func Server(portNum int, contextStruct *vms.ControlContext) error {
 	h := handlerContext{
 		context: contextStruct,
 	}

@@ -15,16 +15,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type CreateVMRequest struct {
-	Memory uint16 `json:"memory"` // VM Memory (GiB)
-	Cpu    uint8  `json:"cpu"`    // VM CPU Logical Core Num (cores)
-	Disk   uint16 `json:"disk"`   // VM Disk (GiB)
-}
-
 // 새 VM 만드는 무언가.
 // 자원 많이 남은 코어를 찾고, 리소스 할당 업데이트, ControlContext 상태 업데이트.
 func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlContext) error {
-	var req CreateVMRequest
+	var req model.CreateVMRequest
 	defer r.Body.Close() // defer << 에러가 발생해도 body가 닫히도록 보장.
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -32,7 +26,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return errors.New("err req body parsing: " + err.Error())
 	}
 
-	log.Printf("func CreateVM() memory=%dGiB, cpu=%d, disk=%dGiB", req.Memory, req.Cpu, req.Disk)
+	log.Printf("func CreateVM() memory=%dMiB, cpu=%d, disk=%dMiB", req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
 
 	// err = validateCreateVMRequest(req)
 
@@ -44,7 +38,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	for i := range contextStruct.Cores {
 		core := &contextStruct.Cores[i]
 		log.Printf("core %s checking: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d, IsAlive=%t", core.IP, core.FreeMemory, core.FreeCPU, core.FreeDisk, core.IsAlive)
-		if core.IsAlive && core.FreeMemory >= req.Memory && core.FreeCPU >= req.Cpu && core.FreeDisk >= req.Disk {
+		if core.IsAlive && core.FreeMemory >= req.HardwareInfo.Memory && core.FreeCPU >= req.HardwareInfo.CPU && core.FreeDisk >= req.HardwareInfo.Disk {
 			selectedCore = core
 			selectedCoreIndex = i
 			log.Printf("core found: %s", selectedCore.IP)
@@ -66,9 +60,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	newVM := &vms.VMInfo{
 		UUID:   newUUID,
-		Memory: req.Memory,
-		Cpu:    req.Cpu,
-		Disk:   req.Disk,
+		Memory: req.HardwareInfo.Memory,
+		Cpu:    req.HardwareInfo.CPU,
+		Disk:   req.HardwareInfo.Disk,
 		IP_VM:  vmIP,
 	}
 
@@ -77,9 +71,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		selectedCore.VMInfoIdx = make(map[vms.UUID]*vms.VMInfo)
 	}
 	selectedCore.VMInfoIdx[newUUID] = newVM
-	selectedCore.FreeMemory -= req.Memory
-	selectedCore.FreeCPU -= req.Cpu
-	selectedCore.FreeDisk -= req.Disk
+	selectedCore.FreeMemory -= req.HardwareInfo.Memory
+	selectedCore.FreeCPU -= req.HardwareInfo.CPU
+	selectedCore.FreeDisk -= req.HardwareInfo.Disk
 	log.Printf("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
 
 	// ControlContext global 상태 업데이트

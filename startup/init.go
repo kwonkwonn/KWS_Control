@@ -77,9 +77,9 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 				return err
 			}
 
-			core.CoreInfoIdx.Cpu = uint8(cpuResp.Idle) // TODO: 단위 맞추기
-			core.CoreInfoIdx.Memory = uint16(memResp.Available)
-			core.CoreInfoIdx.Disk = uint16(diskResp.Free)
+			core.CoreInfoIdx.Cpu = uint32(cpuResp.Idle)
+			core.CoreInfoIdx.Memory = uint32(memResp.Available)
+			core.CoreInfoIdx.Disk = uint32(diskResp.Free)
 
 			return nil
 		})
