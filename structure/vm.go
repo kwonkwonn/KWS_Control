@@ -6,6 +6,7 @@ type Config struct {
 	VmInternalSubnets []string `yaml:"vm_internal_subnets"`
 	Cores             []string `yaml:"cores"`
 	Port              int      `yaml:"port"`
+	DB                string   `yaml:"db"`
 }
 
 type ControlInfra struct {

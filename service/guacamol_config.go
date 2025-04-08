@@ -1,1 +1,140 @@
 package service
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/easy-cloud-Knet/KWS_Control/structure"
+
+	_ "github.com/go-sql-driver/mysql"
+)
+
+func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string, config structure.Config) string {
+	db, err := sql.Open("mysql", config.DB)
+	if err != nil {
+		log.Fatal("DB 연결 실패:", err)
+	}
+	defer db.Close()
+
+	// 1. 무작위 비밀번호 생성
+	userPass, err := generateRandomPassword(12)
+	if err != nil {
+		log.Fatal("비밀번호 생성 실패:", err)
+	}
+
+	passwordHash := fmt.Sprintf("%x", hashPasswordWithSalt(userPass))
+
+	// 2. 32바이트 Salt 생성
+	// salt, err := generateRandomSalt(32)
+	// if err != nil {
+	// 	log.Fatal("Salt 생성 실패:", err)
+	// }
+	// fmt.Println("생성된 salt:", salt)
+
+	// 3. 해시 계산: SHA256(salt + password)
+	//passwordHash := fmt.Sprintf("%x", hashPasswordWithSalt(userPass, salt))
+	//saltHex := fmt.Sprintf("%x", salt)
+
+	fmt.Printf("password: %s\n", userPass)
+	// fmt.Printf("saltHex: %s\n", saltHex)
+	// fmt.Printf("saltHex 길이: %d\n", len(saltHex))
+	// fmt.Printf("passwordHash: %s\n", passwordHash)
+	// fmt.Printf("passwordHash 길이: %d\n", len(passwordHash))
+
+	// 4. Entity 생성
+	res, err := db.Exec(`INSERT INTO guacamole_entity (name, type) VALUES (?, 'USER')`, UUID)
+	if err != nil {
+		log.Fatal("Entity 생성 실패:", err)
+	}
+	entityID, err := res.LastInsertId()
+	if err != nil {
+		log.Fatal("Entity ID 조회 실패:", err)
+	}
+
+	// 5. User 생성 (salt 포함)
+	_, err = db.Exec(`
+		INSERT INTO guacamole_user (entity_id, full_name, password_hash, password_date)
+		VALUES (?, ?, UNHEX(?), ?)
+	`, entityID, Username, passwordHash, time.Now())
+	if err != nil {
+		log.Fatal("User 생성 실패:", err)
+	}
+	fmt.Println("User 생성 완료")
+
+	// 6. SSH Connection 생성
+	res, err = db.Exec(`
+		INSERT INTO guacamole_connection (connection_name, protocol)
+		VALUES (?, 'ssh')
+	`, "My SSH Connection")
+	if err != nil {
+		log.Fatal("Connection 생성 실패:", err)
+	}
+	connID, err := res.LastInsertId()
+	if err != nil {
+		log.Fatal("Connection ID 조회 실패:", err)
+	}
+	fmt.Println("Connection 생성 완료, ID:", connID)
+
+	// 7. Connection Parameter 설정
+	params := map[string]string{
+		"hostname":    Ip,
+		"port":        "22",
+		"username":    Username,
+		"private-key": PrivateKey,
+	}
+	for name, value := range params {
+		_, err = db.Exec(`
+			INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
+			VALUES (?, ?, ?)
+		`, connID, name, value)
+		if err != nil {
+			log.Fatalf("Parameter %s 설정 실패: %v", name, err)
+		}
+	}
+	fmt.Println("Connection Parameter 설정 완료")
+
+	// 8. 권한 부여
+	_, err = db.Exec(`
+		INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
+		VALUES (?, ?, 'READ')
+	`, entityID, connID)
+	if err != nil {
+		log.Fatal("Permission 부여 실패:", err)
+	}
+	fmt.Println("Permission 부여 완료")
+
+	return userPass
+}
+
+// SHA256 해시 함수 (salt 포함)
+func hashPasswordWithSalt(password string) []byte {
+	hash := sha256.New()
+	hash.Write([]byte(password))
+	// hash.Write(salt)
+	return hash.Sum(nil)
+}
+
+// 랜덤 salt 생성 (32바이트)
+// func generateRandomSalt(length int) ([]byte, error) {
+// 	salt := make([]byte, length)
+// 	_, err := rand.Read(salt)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return salt, nil
+// }
+
+// 안전한 랜덤 비밀번호 생성 함수
+func generateRandomPassword(length int) (string, error) {
+	bytes := make([]byte, length)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes)[:length], nil
+}
