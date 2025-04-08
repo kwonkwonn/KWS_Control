@@ -1,5 +1,9 @@
 package model
 
+import (
+	"github.com/easy-cloud-Knet/KWS_Control/structure"
+)
+
 type HardwareInfo struct {
 	CPU    int `json:"cpu"`
 	Memory int `json:"memory"`
@@ -13,13 +17,25 @@ type UserInfoVM struct {
 }
 
 type CreateVMRequest struct {
-	DomType      string       `json:"domType"`
-	DomName      string       `json:"domName"`
-	UUID         string       `json:"uuid"`
-	OS           string       `json:"os"`
-	HardwareInfo HardwareInfo `json:"HWInfo"`
-	NetConf      NetDefine    `json:"network"`
-	Users        []UserInfoVM `json:"users"`
+	DomType      string         `json:"domType"`
+	DomName      string         `json:"domName"`
+	UUID         structure.UUID `json:"uuid"`
+	OS           string         `json:"os"`
+	HardwareInfo HardwareInfo   `json:"HWInfo"`
+	NetConf      NetDefine      `json:"network"`
+	Users        []UserInfoVM   `json:"users"`
+}
+
+type DomainDeleteType uint
+
+const (
+	HardDelete DomainDeleteType = iota
+	SoftDelete
+)
+
+type DeleteVMRequest struct {
+	UUID structure.UUID   `json:"UUID"`
+	Type DomainDeleteType `json:"DeleteType"`
 }
 
 type HostDataType uint
@@ -48,6 +64,9 @@ type CreateVMResponse struct {
 	Memory    uint64 `json:"memory"`
 	NrVirtCpu uint   `json:"nrVirtCpu"`
 	CpuTime   uint64 `json:"cpuTime"`
+}
+
+type DeleteVMResponse struct {
 }
 
 type CoreMachineCpuInfoResponse struct {

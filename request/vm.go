@@ -69,16 +69,25 @@ func (c *CoreClient) doRequest(context context.Context, method, path string, req
 
 func (c *CoreClient) CreateVM(context context.Context, req model.CreateVMRequest) (model.CreateVMResponse, error) {
 	var response model.CreateVMResponse
-	err := c.doRequest(context, http.MethodPost, "/createVm", req, &response)
+	err := c.doRequest(context, http.MethodPost, "/createVM", req, &response)
 	if err != nil {
 		return model.CreateVMResponse{}, err
 	}
 	return response, nil
 }
 
+func (c *CoreClient) DeleteVM(context context.Context, req model.DeleteVMRequest) (model.DeleteVMResponse, error) {
+	var response model.DeleteVMResponse
+	err := c.doRequest(context, http.MethodPost, "/deleteVM", req, &response)
+	if err != nil {
+		return model.DeleteVMResponse{}, err
+	}
+	return response, nil
+}
+
 func (c *CoreClient) GetCoreMachineCpuInfo(context context.Context) (model.CoreMachineCpuInfoResponse, error) {
 	var response model.CoreMachineCpuInfoResponse
-	err := c.doRequest(context, http.MethodPost, "/getStatusHost", model.GetMachineStatusRequest{
+	err := c.doRequest(context, http.MethodGet, "/getStatusHost", model.GetMachineStatusRequest{
 		HostDataType: model.CpuInfo,
 	}, &response)
 	if err != nil {
@@ -89,7 +98,7 @@ func (c *CoreClient) GetCoreMachineCpuInfo(context context.Context) (model.CoreM
 
 func (c *CoreClient) GetCoreMachineDiskInfo(context context.Context) (model.CoreMachineDiskInfoResponse, error) {
 	var response model.CoreMachineDiskInfoResponse
-	err := c.doRequest(context, http.MethodPost, "/getStatusHost", model.GetMachineStatusRequest{
+	err := c.doRequest(context, http.MethodGet, "/getStatusHost", model.GetMachineStatusRequest{
 		HostDataType: model.DiskInfoHi,
 	}, &response)
 	if err != nil {
@@ -100,7 +109,7 @@ func (c *CoreClient) GetCoreMachineDiskInfo(context context.Context) (model.Core
 
 func (c *CoreClient) GetCoreMachineMemoryInfo(context context.Context) (model.CoreMachineMemoryInfoResponse, error) {
 	var response model.CoreMachineMemoryInfoResponse
-	err := c.doRequest(context, http.MethodPost, "/getStatusHost", model.GetMachineStatusRequest{
+	err := c.doRequest(context, http.MethodGet, "/getStatusHost", model.GetMachineStatusRequest{
 		HostDataType: model.MemInfo,
 	}, &response)
 	if err != nil {

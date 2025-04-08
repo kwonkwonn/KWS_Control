@@ -1,8 +1,11 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"github.com/easy-cloud-Knet/KWS_Control/request"
+	"github.com/easy-cloud-Knet/KWS_Control/request/model"
 	"net/http"
 
 	"log"
@@ -21,7 +24,7 @@ type CreateVMRequest struct {
 // 자원 많이 남은 코어를 찾고, 리소스 할당 업데이트, ControlInfra 상태 업데이트.
 func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlInfra) error {
 	var req CreateVMRequest
-	defer r.Body.Close()	// defer << 에러가 발생해도 body가 닫히도록 보장.
+	defer r.Body.Close() // defer << 에러가 발생해도 body가 닫히도록 보장.
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("err req body parsing: %v", err)
@@ -33,7 +36,6 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	// err = validateCreateVMRequest(req)
 
 	// guacamole 부분 필요
-
 
 	// 적합한 코어 찾기
 	var selectedCore *vms.Core = nil
@@ -54,13 +56,12 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return errors.New("selectedCore == nil")
 	}
 
-
 	// vm uuid 생성
 	newUUID := vms.UUID(uuid.NewString())
 	log.Printf("new UUID: %s", newUUID)
 
 	// ip, err := contextStruct.AssignInternalAddress()
-	vmIP := "10.0.0.0"  // 할당된 ip 받아오도록 하는 거 필요.
+	vmIP := "10.0.0.0" // 할당된 ip 받아오도록 하는 거 필요.
 
 	newVM := &vms.VMInfo{
 		UUID:   newUUID,
@@ -88,9 +89,23 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
 	log.Printf("VM %s added to ControlInfra", newUUID)
 
-
 	// request.go 부분 필요
 
 	log.Printf("UUID %s CreateVM request success on core %s", newUUID, selectedCore.IP)
 	return nil
+}
+
+func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlInfra) error {
+	core := contextStruct.FindCoreByVmUUID(uuid)
+	if core == nil {
+		return errors.New("core not found")
+	}
+
+	client := request.NewCoreClient(core)
+	_, err := client.DeleteVM(context.Background(), model.DeleteVMRequest{
+		UUID: uuid,
+		Type: model.HardDelete,
+	})
+
+	return err
 }
