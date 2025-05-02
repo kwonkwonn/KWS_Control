@@ -2,7 +2,6 @@ package vms
 
 import (
 	"github.com/easy-cloud-Knet/KWS_Control/config"
-	_ "libvirt.org/go/libvirt"
 )
 
 type UUID string

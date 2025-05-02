@@ -89,6 +89,7 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 		return structure.ControlContext{}, fmt.Errorf("failed to get core info: %w", err)
 	}
 
+	infra.Config = config
 	return infra, nil
 }
 
