@@ -1,18 +1,26 @@
 package util
 
 import (
-	"encoding/json"
-	"io"
+	"net/http"
+
+	"github.com/sirupsen/logrus"
 )
 
-func UnmarshalBodyAndClose[T any](body io.ReadCloser) (T, error) {
-	var t T
-	err := json.NewDecoder(body).Decode(&t)
+func CheckMethod(w http.ResponseWriter, r *http.Request, expectedMethod string) bool {
+	if r.Method != expectedMethod {
+		log := logrus.New()
+		log.SetReportCaller(true)
+		
+		h := w.Header()
+		h.Del("Content-Length")
+		h.Set("Content-Type", "text/plain; charset=utf-8")
+		h.Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(http.StatusMethodNotAllowed)
 
-	e := body.Close()
-	if err == nil {
-		err = e
+		log.Errorf("Invalid request method: %s", r.Method)
+
+		return false
 	}
-
-	return t, err
+	return true
 }
+

@@ -1,27 +1,29 @@
 package main
 
 import (
-	"fmt"
 	_ "os"
 
-	api "github.com/easy-cloud-Knet/KWS_Control/api/server"
-	//WorkerConn "github.com/easy-cloud-Knet/KWS_Control/api/workercont"
-	vms "github.com/easy-cloud-Knet/KWS_Control/vm"
+	"github.com/easy-cloud-Knet/KWS_Control/api"
+	"github.com/easy-cloud-Knet/KWS_Control/startup"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	fmt.Println("hellot")
+	log := logrus.New()
+	log.SetReportCaller(true)
 
-	//var TaskHandlersPool WorkerConn.TaskHandler
-	//WorkerConn.InitWorkers(&TaskHandlersPool)
-	contextStruct, err := vms.InitializeDevices("./vm/database.json")
+	log.Infof("KWS Control Server Starting...")
+
+	contextStruct, err := startup.Initialize("./startup/vm_info.json", "config.yaml")
 	if err != nil {
+		log.Errorf("Failed to initialize: %v", err)
 		panic(err)
 	}
 
 	go func() {
-		err := api.Server(8081, contextStruct)
+		err := api.Server(contextStruct.Config.Port, &contextStruct)
 		if err != nil {
+			log.Errorf("Failed to start server: %v", err)
 			panic(err)
 		}
 	}()

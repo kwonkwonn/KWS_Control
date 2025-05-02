@@ -58,7 +58,5 @@ fabric.properties
 KWS_Control
 *.exe
 
-/config.yaml
+config.yaml
 sshprivate
-
-.gitmessage
