@@ -15,13 +15,13 @@ jobs:
 
     - name: Build and tag Docker image
       run: |
-        docker build --no-cache -t ${{ secrets.DOCKER_HUB_USERNAME }}/kws_control:latest .
-        docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/kws_control:latest ${{ secrets.DOCKER_HUB_USERNAME }}/kws_control:latest
+        docker build --no-cache -t ${{ secrets.DOCKER_HUB_USERNAME }}/control_deploy:latest .
+        docker tag ${{ secrets.DOCKER_HUB_USERNAME }}/control_deploy:latest ${{ secrets.DOCKER_HUB_USERNAME }}/control_deploy:latest
 
     - name: Deploy container locally
       run: |
-        IMAGE=${{ secrets.DOCKER_HUB_USERNAME }}/kws_control:latest
-        docker stop KWS_CONTROL || true
-        docker rm KWS_CONTROL || true
-        docker run -d --name KWS_CONTROL -p 25119:8080 $IMAGE
+        IMAGE=${{ secrets.DOCKER_HUB_USERNAME }}/control_deploy:latest
+        docker stop CONTROL_DEPLOY || true
+        docker rm CONTROL_DEPLOY || true
+        docker run -d --name CONTROL_DEPLOY -p 8081:8081 $IMAGE
         docker system prune -af
