@@ -76,14 +76,6 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	selectedCore.FreeDisk -= req.HardwareInfo.Disk
 	log.Infof("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
 
-	// ControlContext global 상태 업데이트
-	if contextStruct.VMLocation == nil {
-		contextStruct.VMLocation = make(map[vms.UUID]*vms.Core)
-	}
-	contextStruct.VMLocation[req.UUID] = &contextStruct.Cores[selectedCoreIndex]
-	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
-	log.Infof("VM %s added to ControlContext", req.UUID)
-
 	req.NetConf.Ips = []string{vmIP}
 	req.NetConf.NetType = 0
 
@@ -93,6 +85,14 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		log.Infof("Error creating VM on core %s: %v", selectedCore.IP, err)
 		return err
 	}
+
+	// ControlContext global 상태 업데이트
+	if contextStruct.VMLocation == nil {
+		contextStruct.VMLocation = make(map[vms.UUID]*vms.Core)
+	}
+	contextStruct.VMLocation[req.UUID] = &contextStruct.Cores[selectedCoreIndex]
+	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
+	log.Infof("VM %s added to ControlContext", req.UUID)
 
 	log.Infof("UUID %s CreateVM request success on core %s", req.UUID, selectedCore.IP)
 	return nil
