@@ -78,7 +78,7 @@ func (c *CoreClient) CreateVM(context context.Context, req model.CreateVMRequest
 
 func (c *CoreClient) DeleteVM(context context.Context, req model.DeleteVMRequest) (model.DeleteVMResponse, error) {
 	var response model.DeleteVMResponse
-	err := c.doRequest(context, http.MethodPost, "/deleteVM", req, &response)
+	err := c.doRequest(context, http.MethodPost, "/DeleteVM", req, &response)
 	if err != nil {
 		return model.DeleteVMResponse{}, err
 	}
