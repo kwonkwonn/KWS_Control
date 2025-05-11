@@ -1,6 +1,7 @@
 name: Development Container - Build and Deploy Docker Image
 
 on:
+  workflow_dispatch: {}
   push:
     branches:
       - Dev
