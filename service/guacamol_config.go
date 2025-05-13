@@ -5,12 +5,13 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
-
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -26,25 +27,18 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 	if err != nil {
 		log.Fatal("비밀번호 생성 실패:", err)
 	}
-
-	passwordHash := fmt.Sprintf("%x", hashPasswordWithSalt(userPass))
+	fmt.Println("생성된 비밀번호:", userPass)
 
 	// 2. 32바이트 Salt 생성
-	// salt, err := generateRandomSalt(32)
-	// if err != nil {
-	// 	log.Fatal("Salt 생성 실패:", err)
-	// }
-	// fmt.Println("생성된 salt:", salt)
+	salt, err := generateRandomSalt(32)
+	if err != nil {
+		log.Fatal("Salt 생성 실패:", err)
+	}
+	fmt.Println("생성된 salt:", hex.EncodeToString(salt))
 
 	// 3. 해시 계산: SHA256(salt + password)
-	//passwordHash := fmt.Sprintf("%x", hashPasswordWithSalt(userPass, salt))
-	//saltHex := fmt.Sprintf("%x", salt)
-
-	fmt.Printf("password: %s\n", userPass)
-	// fmt.Printf("saltHex: %s\n", saltHex)
-	// fmt.Printf("saltHex 길이: %d\n", len(saltHex))
-	// fmt.Printf("passwordHash: %s\n", passwordHash)
-	// fmt.Printf("passwordHash 길이: %d\n", len(passwordHash))
+	passwordHash := fmt.Sprintf("%x", hashPasswordWithSalt(userPass, salt))
+	saltHex := fmt.Sprintf("%x", salt)
 
 	// 4. Entity 생성
 	res, err := db.Exec(`INSERT INTO guacamole_entity (name, type) VALUES (?, 'USER')`, UUID)
@@ -58,9 +52,9 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 
 	// 5. User 생성 (salt 포함)
 	_, err = db.Exec(`
-		INSERT INTO guacamole_user (entity_id, full_name, password_hash, password_date)
-		VALUES (?, ?, UNHEX(?), ?)
-	`, entityID, Username, passwordHash, time.Now())
+		INSERT INTO guacamole_user (entity_id, full_name, password_hash, password_salt, password_date)
+		VALUES (?, ?, UNHEX(?), UNHEX(?), ?)
+	`, entityID, Username, passwordHash, saltHex, time.Now())
 	if err != nil {
 		log.Fatal("User 생성 실패:", err)
 	}
@@ -112,22 +106,26 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 }
 
 // SHA256 해시 함수 (salt 포함)
-func hashPasswordWithSalt(password string) []byte {
+func hashPasswordWithSalt(password string, salt []byte) []byte {
 	hash := sha256.New()
+
+	var temp = hex.EncodeToString(salt)
+
+	temp = strings.ToUpper(temp)
 	hash.Write([]byte(password))
-	// hash.Write(salt)
+	hash.Write([]byte(temp))
 	return hash.Sum(nil)
 }
 
 // 랜덤 salt 생성 (32바이트)
-// func generateRandomSalt(length int) ([]byte, error) {
-// 	salt := make([]byte, length)
-// 	_, err := rand.Read(salt)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return salt, nil
-// }
+func generateRandomSalt(length int) ([]byte, error) {
+	salt := make([]byte, length)
+	_, err := rand.Read(salt)
+	if err != nil {
+		return nil, err
+	}
+	return salt, nil
+}
 
 // 안전한 랜덤 비밀번호 생성 함수
 func generateRandomPassword(length int) (string, error) {

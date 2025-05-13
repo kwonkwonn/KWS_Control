@@ -6,17 +6,16 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
 )
 
-func SshKeygen() (privateKeyPEM, publicKeyOpenSSH string, err error) {
+func SshKeygen() (privateKeyPEM, publicKeyOpenSSH string) {
 	// RSA 2048 비트 개인 키 생성
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return "", "", fmt.Errorf("키 생성 실패: %v", err)
+		return "", ""
 	}
 
 	// PEM 포맷으로 변환 (PKCS#1)
@@ -29,20 +28,20 @@ func SshKeygen() (privateKeyPEM, publicKeyOpenSSH string, err error) {
 	tmpPrivFile := "temp_rsa_key.pem"
 	err = os.WriteFile(tmpPrivFile, privPem, 0600)
 	if err != nil {
-		return "", "", fmt.Errorf("임시 파일 저장 실패: %v", err)
+		return "", ""
 	}
 
 	// OpenSSH 포맷으로 변환 ('-m PEM' 제거)
 	cmd := exec.Command("ssh-keygen", "-p", "-f", tmpPrivFile, "-N", "")
 	err = cmd.Run()
 	if err != nil {
-		return "", "", fmt.Errorf("OpenSSH 변환 실패: %v", err)
+		return "", ""
 	}
 
 	// 변환된 OpenSSH Private Key 읽기
 	privKeyBytes, err := os.ReadFile(tmpPrivFile)
 	if err != nil {
-		return "", "", fmt.Errorf("변환된 키 읽기 실패: %v", err)
+		return "", ""
 	}
 	privateKeyPEM = string(privKeyBytes)
 
@@ -52,12 +51,12 @@ func SshKeygen() (privateKeyPEM, publicKeyOpenSSH string, err error) {
 	cmd.Stdout = &out
 	err = cmd.Run()
 	if err != nil {
-		return "", "", fmt.Errorf("공개 키 변환 실패: %v", err)
+		return "", ""
 	}
 	publicKeyOpenSSH = strings.TrimSpace(out.String())
 
 	// 임시 파일 삭제
 	_ = os.Remove(tmpPrivFile)
 
-	return privateKeyPEM, publicKeyOpenSSH, nil
+	return privateKeyPEM, publicKeyOpenSSH
 }

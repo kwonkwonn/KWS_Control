@@ -57,6 +57,10 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	// ip, err := contextStruct.AssignInternalAddress()
 	vmIP := "10.0.0.0" // 할당된 ip 받아오도록 하는 거 필요.
+	var privateKeyPEM, publicKeyOpenSSH = SshKeygen()
+
+	GuacamoleConfig(req.Users[0].Name, string(req.UUID), vmIP, privateKeyPEM, contextStruct.Config)
+	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
 
 	newVM := &vms.VMInfo{
 		UUID:   req.UUID,
