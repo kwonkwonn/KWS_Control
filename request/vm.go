@@ -30,6 +30,7 @@ func NewCoreClient(core *structure.Core) *CoreClient {
 
 func (c *CoreClient) doRequest(context context.Context, method, path string, requestBody interface{}, responseBody interface{}) error {
 	log := logrus.New()
+	log.SetReportCaller(true)
 
 	var reqBodyReader io.Reader
 	if requestBody != nil {
