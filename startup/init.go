@@ -69,15 +69,15 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 				IsAlive: true,
 			}
 			infra.Cores = append(infra.Cores, newCore)
-
-			core = &newCore
+			core = &infra.Cores[len(infra.Cores)-1]
 		} else {
 			core.IsAlive = true
 		}
 
 		currentCore := core
-		client := request.NewCoreClient(currentCore)
 		g.Go(func() error {
+			client := request.NewCoreClient(currentCore)
+
 			cpuResp, err := client.GetCoreMachineCpuInfo(ctx)
 			if err != nil {
 				currentCore.IsAlive = false

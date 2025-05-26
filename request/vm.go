@@ -85,37 +85,38 @@ func (c *CoreClient) DeleteVM(context context.Context, req model.DeleteVMRequest
 	return response, nil
 }
 
-func (c *CoreClient) GetCoreMachineCpuInfo(context context.Context) (model.CoreMachineCpuInfoResponse, error) {
-	var response model.CoreMachineCpuInfoResponse
+func (c *CoreClient) GetCoreMachineCpuInfo(context context.Context) (*model.CoreMachineCpuInfoResponse, error) {
+	var response model.CoreResponse[model.CoreMachineCpuInfoResponse]
 	err := c.doRequest(context, http.MethodGet, "/getStatusHost", model.GetMachineStatusRequest{
 		HostDataType: model.CpuInfo,
 	}, &response)
 	if err != nil {
-		return model.CoreMachineCpuInfoResponse{}, err
+		return nil, err
 	}
-	return response, nil
+	return response.Information, nil
 }
 
-func (c *CoreClient) GetCoreMachineDiskInfo(context context.Context) (model.CoreMachineDiskInfoResponse, error) {
-	var response model.CoreMachineDiskInfoResponse
+func (c *CoreClient) GetCoreMachineDiskInfo(context context.Context) (*model.CoreMachineDiskInfoResponse, error) {
+	var response model.CoreResponse[model.CoreMachineDiskInfoResponse]
 	err := c.doRequest(context, http.MethodGet, "/getStatusHost", model.GetMachineStatusRequest{
 		HostDataType: model.DiskInfoHi,
 	}, &response)
 	if err != nil {
-		return model.CoreMachineDiskInfoResponse{}, err
+		return nil, err
 	}
-	return response, nil
+
+	return response.Information, nil
 }
 
-func (c *CoreClient) GetCoreMachineMemoryInfo(context context.Context) (model.CoreMachineMemoryInfoResponse, error) {
-	var response model.CoreMachineMemoryInfoResponse
+func (c *CoreClient) GetCoreMachineMemoryInfo(context context.Context) (*model.CoreMachineMemoryInfoResponse, error) {
+	var response model.CoreResponse[model.CoreMachineMemoryInfoResponse]
 	err := c.doRequest(context, http.MethodGet, "/getStatusHost", model.GetMachineStatusRequest{
 		HostDataType: model.MemInfo,
 	}, &response)
 	if err != nil {
-		return model.CoreMachineMemoryInfoResponse{}, err
+		return nil, err
 	}
-	return response, nil
+	return response.Information, nil
 }
 
 func (c *CoreClient) GetVMCpuInfo(ctx context.Context, uuid structure.UUID) (model.CoreMachineCpuInfoResponse, error) {

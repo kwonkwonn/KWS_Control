@@ -8,15 +8,46 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 )
 
+func getDBConnection() string {
+	log := logrus.New()
+	log.SetReportCaller(true)
+
+	if err := godotenv.Load(); err != nil {
+		log.Warn(".env file not found,,, using default values")
+	}
+
+	// .env에서 가져옴 or 기본값 사용
+	dbUser := getEnvOrDefault("DB_USER", "root")
+	dbPassword := getEnvOrDefault("DB_PASSWORD", "password")
+	dbHost := getEnvOrDefault("DB_HOST", "localhost")
+	dbPort := getEnvOrDefault("DB_PORT", "3306")
+	dbName := getEnvOrDefault("DB_NAME", "guacamole_db")
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", 
+		dbUser, dbPassword, dbHost, dbPort, dbName)
+	
+	return dsn
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return defaultValue
+}
+
 func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string, config structure.Config) string {
-	db, err := sql.Open("mysql", config.DB)
+	db, err := sql.Open("mysql", getDBConnection())
 	if err != nil {
 		log.Fatal("DB 연결 실패:", err)
 	}

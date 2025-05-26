@@ -5,4 +5,3 @@ cores:
   - "192.168.0.10:12345"
 
 port: 8081
-db: "root:password@tcp(localhost:3306)/guacamole_db"
