@@ -63,15 +63,16 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return err
 	}
 
-	GuacamoleConfig(req.Users[0].Name, string(req.UUID), vmIP, privateKeyPEM, contextStruct.Config)
+	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), vmIP, privateKeyPEM, contextStruct.Config)
 	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
 
 	newVM := &vms.VMInfo{
-		UUID:   req.UUID,
-		Memory: req.HardwareInfo.Memory,
-		Cpu:    req.HardwareInfo.CPU,
-		Disk:   req.HardwareInfo.Disk,
-		IP_VM:  vmIP,
+		UUID:         req.UUID,
+		GuacPassword: userPass,
+		Memory:       req.HardwareInfo.Memory,
+		Cpu:          req.HardwareInfo.CPU,
+		Disk:         req.HardwareInfo.Disk,
+		IP_VM:        vmIP,
 	}
 
 	// selected core 상태 업데이트

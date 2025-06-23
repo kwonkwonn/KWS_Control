@@ -20,8 +20,10 @@ func (c *ControlContext) FindCoreByVmUUID(uuid UUID) *Core {
 	log.SetReportCaller(true)
 
 	if core, ok := c.VMLocation[uuid]; ok {
-		log.Infof("Found core for VM UUID %s: %s", uuid, core.IP)
-		return core
+		if core.IsAlive {
+			log.Infof("Found core for VM UUID %s: %s", uuid, core.IP)
+			return core
+		}
 	}
 	log.Errorf("Core not found for VM UUID %s", uuid)
 	return nil

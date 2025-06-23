@@ -14,3 +14,7 @@ type ApiVmStatusRequest struct {
 	UUID structure.UUID `json:"uuid"`
 	Type string         `json:"type"` // "cpu", "memory", or "disk"
 }
+
+type ApiVmConnectRequest struct {
+	UUID structure.UUID `json:"uuid"`
+}

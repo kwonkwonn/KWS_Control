@@ -109,3 +109,32 @@ func (c *handlerContext) vmStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (c *handlerContext) vmConnect(w http.ResponseWriter, r *http.Request) {
+	//goland:noinspection GoUnhandledErrorResult
+	defer r.Body.Close()
+
+	log := logrus.New()
+	log.SetReportCaller(true)
+
+	var req model.ApiVmConnectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		log.Errorf("Failed to decode request body: %v", err)
+		return
+	}
+
+	authToken, err := service.GetGuacamoleToken(req.UUID, c.context)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Errorf("Failed to get Guacamole token: %v", err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]string{"authToken": authToken}); err != nil {
+		log.Errorf("Failed to encode response: %v", err)
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
