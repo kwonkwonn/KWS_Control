@@ -110,6 +110,11 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 		return structure.ControlContext{}, fmt.Errorf("failed to get core info: %w", err)
 	}
 
+	guacBaseUrlEnv := os.Getenv("GUACAMOLE_BASE_URL")
+	if guacBaseUrlEnv != "" {
+		config.GuacBaseURL = guacBaseUrlEnv
+	}
+
 	infra.Config = config
 	return infra, nil
 }
