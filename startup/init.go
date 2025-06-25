@@ -26,6 +26,7 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 		return structure.ControlContext{}, fmt.Errorf("failed to parse JSON: %v", err)
 	}
 
+	// 모든 Core 정의
 	infra.VMLocation = make(map[structure.UUID]*structure.Core)
 	for i := range infra.Cores {
 		for vmUUID := range infra.Cores[i].VMInfoIdx {

@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	_ "os"
+
+	"github.com/easy-cloud-Knet/KWS_Control/structure"
 
 	"github.com/easy-cloud-Knet/KWS_Control/api"
 	"github.com/easy-cloud-Knet/KWS_Control/startup"
@@ -23,6 +24,7 @@ func main() {
 	}
 
 	printCores(contextStruct.Cores)
+	contextStruct.AssignInternalAddress()
 
 	go func() {
 		err := api.Server(contextStruct.Config.Port, &contextStruct)

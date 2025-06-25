@@ -1,6 +1,9 @@
 package structure
 
 import (
+	"fmt"
+	"net"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,4 +28,42 @@ func (c *ControlContext) FindCoreByVmUUID(uuid UUID) *Core {
 	}
 	log.Errorf("Core not found for VM UUID %s", uuid)
 	return nil
+}
+
+func (c *ControlContext) AssignInternalAddress() {
+	var usedIPs = make(map[string]bool)
+
+	// 1. 이미 사용된 IP들을 수집
+	for _, core := range c.Cores {
+		for _, vm := range core.VMInfoIdx {
+			usedIPs[vm.IP_VM] = true
+		}
+	}
+
+	// 2. 서브넷을 순회하며 IP를 생성
+	for _, cidr := range c.Config.VmInternalSubnets {
+		_, ipnet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+
+		for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); incrementIP(ip) {
+			ipStr := ip.String()
+			if !usedIPs[ipStr] && ipStr != ipnet.IP.String() {
+				fmt.Println("할당 가능한 IP:", ipStr)
+				return
+			}
+		}
+	}
+
+	fmt.Println("사용 가능한 IP가 없습니다")
+}
+
+func incrementIP(ip net.IP) {
+	for i := len(ip) - 1; i >= 0; i-- {
+		ip[i]++
+		if ip[i] != 0 {
+			break
+		}
+	}
 }

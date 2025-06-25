@@ -20,13 +20,13 @@ type Core struct {
 	IsAlive     bool             //Core가 살았는지 죽었는지 확인
 	VMInfoIdx   map[UUID]*VMInfo // core 안에 VM 정보
 	FreeMemory  uint32           //할당되지 않은 코어의 Memory 자원 MiB
-	FreeCPU     uint32            //할당되지 않은 코어의 CPU 자원 논리 코어 수
+	FreeCPU     uint32           //할당되지 않은 코어의 CPU 자원 논리 코어 수
 	FreeDisk    uint32           //할당되지 않은 코어의 Disk 자원 MiB
 }
 
 type CoreInfo struct {
 	Memory uint32 // 코어의 전체 메모리 MiB
-	Cpu    uint32  // 코어의 전체 CPU 논리 코어 수
+	Cpu    uint32 // 코어의 전체 CPU 논리 코어 수
 	Disk   uint32 // 코어의 전체 디스크 MiB
 }
 
