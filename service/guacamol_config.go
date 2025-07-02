@@ -35,6 +35,8 @@ func getDBConnection() string {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
 		dbUser, dbPassword, dbHost, dbPort, dbName)
 
+	fmt.Println(dsn)
+
 	return dsn
 }
 

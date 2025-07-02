@@ -3,6 +3,7 @@ package structure
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -30,7 +31,7 @@ func (c *ControlContext) FindCoreByVmUUID(uuid UUID) *Core {
 	return nil
 }
 
-func (c *ControlContext) AssignInternalAddress() {
+func (c *ControlContext) AssignInternalAddress() (string, error) {
 	var usedIPs = make(map[string]bool)
 
 	// 1. 이미 사용된 IP들을 수집
@@ -49,14 +50,24 @@ func (c *ControlContext) AssignInternalAddress() {
 
 		for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); incrementIP(ip) {
 			ipStr := ip.String()
-			if !usedIPs[ipStr] {
-				fmt.Println("할당 가능한 IP:", ipStr)
-				return
+
+			if ipStr == ipnet.IP.String() {
+				continue
+			}
+
+			if strings.HasPrefix(ipStr, "10.5.15.") {
+				lastOctet := ip[3]
+				if lastOctet >= 0 && lastOctet <= 10 {
+					continue
+				}
+			}
+			if !usedIPs[ipStr] && ipStr != ipnet.IP.String() {
+				return ipStr, nil
 			}
 		}
 	}
 
-	fmt.Println("사용 가능한 IP가 없습니다")
+	return "", fmt.Errorf("No IP available for allocation")
 }
 
 func incrementIP(ip net.IP) {

@@ -18,6 +18,7 @@ import (
 // 새 VM 만드는 무언가.
 // 자원 많이 남은 코어를 찾고, 리소스 할당 업데이트, ControlContext 상태 업데이트.
 func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlContext) error {
+	//var err error
 	log := logrus.New()
 	log.SetReportCaller(true)
 
@@ -54,16 +55,19 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		log.Errorf("selectedCore == nil")
 		return errors.New("selectedCore == nil")
 	}
-
-	// ip, err := contextStruct.AssignInternalAddress()
-	vmIP := "10.0.0.0" // 할당된 ip 받아오도록 하는 거 필요.
 	var privateKeyPEM, publicKeyOpenSSH, err = GenerateSshKey()
 	if err != nil {
 		log.Errorf("GenerateSshKey() failed: %v", err)
 		return err
 	}
 
-	GuacamoleConfig(req.Users[0].Name, string(req.UUID), vmIP, privateKeyPEM, contextStruct.Config)
+	instanceIp, err := contextStruct.AssignInternalAddress()
+	if err != nil {
+		log.Errorf("AssignInternalAddress() failed: %v", err)
+		return err
+	}
+	fmt.Printf("AssignInternalAddress(): %s", instanceIp)
+	GuacamoleConfig(req.Users[0].Name, string(req.UUID), instanceIp, privateKeyPEM, contextStruct.Config)
 	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
 
 	newVM := &vms.VMInfo{
@@ -71,7 +75,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		Memory: req.HardwareInfo.Memory,
 		Cpu:    req.HardwareInfo.CPU,
 		Disk:   req.HardwareInfo.Disk,
-		IP_VM:  vmIP,
+		IP_VM:  instanceIp,
 	}
 
 	// selected core 상태 업데이트
@@ -84,7 +88,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	selectedCore.FreeDisk -= req.HardwareInfo.Disk
 	log.Infof("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
 
-	req.NetConf.Ips = []string{vmIP}
+	req.NetConf.Ips = []string{instanceIp}
 	req.NetConf.NetType = 0
 	req.Users[0].SSHAuthorizedKeys = []string{publicKeyOpenSSH}
 
