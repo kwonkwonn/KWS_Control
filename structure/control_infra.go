@@ -57,7 +57,7 @@ func (c *ControlContext) AssignInternalAddress() (string, error) {
 
 			if strings.HasPrefix(ipStr, "10.5.15.") {
 				lastOctet := ip[3]
-				if lastOctet >= 0 && lastOctet <= 10 {
+				if lastOctet <= 10 {
 					continue
 				}
 			}

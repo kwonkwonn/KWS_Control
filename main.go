@@ -22,10 +22,8 @@ func main() {
 		log.Errorf("Failed to initialize: %v", err)
 		panic(err)
 	}
-	temp, err := contextStruct.AssignInternalAddress()
+
 	printCores(contextStruct.Cores)
-	contextStruct.AssignInternalAddress()
-	fmt.Printf("locate IP : %s\n", temp)
 
 	go func() {
 		err := api.Server(contextStruct.Config.Port, &contextStruct)
