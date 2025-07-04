@@ -12,10 +12,14 @@ import (
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/sirupsen/logrus"
 	_ "gopkg.in/yaml.v3"
 )
 
 func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
+	log := logrus.New()
+	log.SetReportCaller(true)
+
 	b, err := os.ReadFile(dataPath)
 	if err != nil {
 		return structure.ControlContext{}, err
@@ -78,11 +82,6 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 		g.Go(func() error {
 			client := request.NewCoreClient(currentCore)
 
-			cpuResp, err := client.GetCoreMachineCpuInfo(ctx)
-			if err != nil {
-				currentCore.IsAlive = false
-				return fmt.Errorf("failed to get CPU info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
-			}
 			memResp, err := client.GetCoreMachineMemoryInfo(ctx)
 			if err != nil {
 				currentCore.IsAlive = false
@@ -94,13 +93,34 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 				return fmt.Errorf("failed to get Disk info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
 			}
 
-			currentCore.CoreInfoIdx.Cpu = uint32(cpuResp.Idle)
-			currentCore.CoreInfoIdx.Memory = uint32(memResp.Total)
-			currentCore.CoreInfoIdx.Disk = uint32(diskResp.Total)
+			totalMemoryMiB := uint32(memResp.Total * 1024)
+			totalDiskMiB := uint32(diskResp.Total * 1024)
+			freeMemoryMiB := uint32(memResp.Available * 1024)
+			freeDiskMiB := uint32(diskResp.Free * 1024)
 
-			currentCore.FreeDisk = uint32(diskResp.Free)
-			currentCore.FreeMemory = uint32(memResp.Available)
-			currentCore.FreeCPU = uint32(cpuResp.Idle)
+			var totalCpuCores uint32
+			if currentCore.CoreInfoIdx.Cpu > 0 {
+				totalCpuCores = currentCore.CoreInfoIdx.Cpu
+			} else {
+				log.Infof("currentCore.CoreInfoIdx.Cpu: %d", currentCore.CoreInfoIdx.Cpu)
+				totalCpuCores = 9999 // 음 코어를 현재 반환받지 못하는-
+			}
+
+			allocatedCpuCores := uint32(0)
+			if currentCore.VMInfoIdx != nil {
+				for _, vm := range currentCore.VMInfoIdx {
+					allocatedCpuCores += vm.Cpu
+				}
+			}
+			freeCpuCores := totalCpuCores - allocatedCpuCores
+
+			currentCore.CoreInfoIdx.Cpu = totalCpuCores
+			currentCore.CoreInfoIdx.Memory = totalMemoryMiB
+			currentCore.CoreInfoIdx.Disk = totalDiskMiB
+
+			currentCore.FreeDisk = freeDiskMiB
+			currentCore.FreeMemory = freeMemoryMiB
+			currentCore.FreeCPU = freeCpuCores
 
 			return nil
 		})
