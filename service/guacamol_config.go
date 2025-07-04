@@ -219,3 +219,74 @@ func generateRandomPassword(length int) (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes)[:length], nil
 }
+
+// 뭔가뭔가 문제가 생겼을 때, 지우는 무언가
+func CleanupGuacamoleConfig(UUID string) error {
+	log := util.GetLogger()
+
+	db, err := sql.Open("mysql", getDBConnection())
+	if err != nil {
+		log.Warnf("failed to establish database connection: %v", err)
+		return err
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		log.Warnf("database connection test failed: %v", err)
+		return err
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		log.Warnf("failed to start transaction: %v", err)
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			log.Warn("rolling back transaction due to error")
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("failed to rollback transaction:", rbErr)
+			}
+		}
+	}()
+
+	// entity_id 찾고
+	var entityID int64
+	err = tx.QueryRow(`SELECT entity_id FROM guacamole_entity WHERE name = ? AND type = 'USER'`, UUID).Scan(&entityID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Infof("no entity found for UUID %s, nothing to clean up", UUID)
+			return nil // gpt << 예외처리왤케잘하죠 이런 것도 챙겨주네 없어서 나쁠 건 없으니 남길게요
+		}
+		log.Errorf("failed to find entity for UUID %s: %v", UUID, err)
+		return err
+	}
+
+	// 관련 레코드들 알잘딱 삭제하고
+	_, err = tx.Exec(`DELETE FROM guacamole_entity WHERE entity_id = ?`, entityID)
+	if err != nil {
+		log.Errorf("failed to delete entity for UUID %s: %v", UUID, err)
+		return err
+	}
+
+	_, err = tx.Exec(`
+		DELETE FROM guacamole_connection 
+		WHERE connection_id NOT IN (
+			SELECT DISTINCT connection_id 
+			FROM guacamole_connection_permission
+		)
+	`)
+	if err != nil {
+		log.Errorf("failed to delete orphaned connections: %v", err)
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		log.Errorf("failed to commit transaction: %v", err)
+		return err
+	}
+
+	log.Infof("successfully cleaned up configuration for UUID %s", UUID)
+	return nil
+}

@@ -104,8 +104,32 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return err
 	}
 
+	// 문제가 생겼을 때 지우는 무언가
+	var guacamoleConfigured = false
+	var coreResourcesAllocated = false
+
+	cleanup := func() {
+		if guacamoleConfigured {
+			log.Info("clean up clean up")
+			if cleanupErr := CleanupGuacamoleConfig(string(req.UUID)); cleanupErr != nil {
+				log.Errorf("Failed to cleanup Guacamole config during rollback: %v", cleanupErr)
+			}
+		}
+		if coreResourcesAllocated {
+			delete(selectedCore.VMInfoIdx, req.UUID)
+			selectedCore.FreeMemory += req.HardwareInfo.Memory
+			selectedCore.FreeCPU += req.HardwareInfo.CPU
+			selectedCore.FreeDisk += req.HardwareInfo.Disk
+		}
+	}
 	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), vmIP, privateKeyPEM, contextStruct.Config)
 	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
+
+	if userPass == "" {
+		log.Error("Failed to configure Guacamole")
+		return errors.New("failed to configure Guacamole")
+	}
+	guacamoleConfigured = true
 
 	newVM := &vms.VMInfo{
 		UUID:         req.UUID,
@@ -124,6 +148,8 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	selectedCore.FreeMemory -= req.HardwareInfo.Memory
 	selectedCore.FreeCPU -= req.HardwareInfo.CPU
 	selectedCore.FreeDisk -= req.HardwareInfo.Disk
+	coreResourcesAllocated = true
+
 	log.Infof("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
 
 	req.NetConf.Ips = []string{vmIP}
@@ -133,12 +159,8 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	client := request.NewCoreClient(selectedCore)
 	_, err = client.CreateVM(context.Background(), req)
 	if err != nil {
-		delete(selectedCore.VMInfoIdx, req.UUID)
-		selectedCore.FreeMemory += req.HardwareInfo.Memory
-		selectedCore.FreeCPU += req.HardwareInfo.CPU
-		selectedCore.FreeDisk += req.HardwareInfo.Disk
-
-		log.Infof("Error creating VM on core %s: %v", selectedCore.IP, err)
+		log.Errorf("Error creating VM on core %s: %v", selectedCore.IP, err)
+		cleanup() // 직접 지우지 말고 요 함수 하나로--
 		return err
 	}
 
