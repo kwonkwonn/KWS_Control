@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
-	"github.com/sirupsen/logrus"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
 type GuacamoleClient struct {
@@ -44,8 +44,7 @@ type AuthenticateResponse struct {
 func (c *GuacamoleClient) Authenticate(ctx context.Context, username, password string) error {
 	// Authenticate는 w-form-www-urlencoded 형식으로 요청을 보내서 doRequest를 사용하지 않음
 
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	data := url.Values{}
 	data.Set("username", username)
@@ -82,8 +81,7 @@ func (c *GuacamoleClient) Authenticate(ctx context.Context, username, password s
 }
 
 func (c *GuacamoleClient) doRequest(ctx context.Context, method, path string, requestBody, responseBody interface{}) error {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	var reqBodyReader io.Reader
 	if requestBody != nil {

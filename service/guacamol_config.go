@@ -12,14 +12,13 @@ import (
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/joho/godotenv"
-	"github.com/sirupsen/logrus"
 )
 
 func getDBConnection() string {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	if err := godotenv.Load(); err != nil {
 		log.Warn(".env file not found,,, using default values")
@@ -46,8 +45,7 @@ func getEnvOrDefault(key, defaultValue string) string {
 }
 
 func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string, config structure.Config) string {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	db, err := sql.Open("mysql", getDBConnection())
 	if err != nil {

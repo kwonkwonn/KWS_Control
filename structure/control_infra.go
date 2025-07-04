@@ -1,7 +1,7 @@
 package structure
 
 import (
-	"github.com/sirupsen/logrus"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
 type ControlContext struct {
@@ -15,9 +15,7 @@ type ControlContext struct {
 }
 
 func (c *ControlContext) FindCoreByVmUUID(uuid UUID) *Core {
-
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	if core, ok := c.VMLocation[uuid]; ok {
 		if core.IsAlive {

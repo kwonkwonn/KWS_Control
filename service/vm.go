@@ -10,16 +10,15 @@ import (
 
 	"github.com/easy-cloud-Knet/KWS_Control/request"
 	"github.com/easy-cloud-Knet/KWS_Control/request/model"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 
 	vms "github.com/easy-cloud-Knet/KWS_Control/structure"
-	"github.com/sirupsen/logrus"
 )
 
 // 새 VM 만드는 무언가.
 // 자원 많이 남은 코어를 찾고, 리소스 할당 업데이트, ControlContext 상태 업데이트.
 func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlContext) error {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	var req model.CreateVMRequest
 	defer r.Body.Close() // defer << 에러가 발생해도 body가 닫히도록 보장.
@@ -29,29 +28,71 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return errors.New("err req body parsing: " + err.Error())
 	}
 
-	log.Infof("func CreateVM() memory=%dMiB, cpu=%d, disk=%dMiB", req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
+	log.Infof("func CreateVM() memory=%d GiB, cpu=%d, disk=%d GiB", req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
 
 	// err = validateCreateVMRequest(req)
 
 	// guacamole 부분 필요
 
 	// 적합한 코어 찾기
+	log.Infof("core selection process. req: memory=%d GiB, cpu=%d, disk=%d",
+		req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
+
 	var selectedCore *vms.Core = nil
 	selectedCoreIndex := -1
+	aliveCount := 0
+
 	for i := range contextStruct.Cores {
 		core := &contextStruct.Cores[i]
 		log.Infof("core %s checking: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d, IsAlive=%t", core.IP, core.FreeMemory, core.FreeCPU, core.FreeDisk, core.IsAlive)
 
-		if core.IsAlive && core.FreeMemory >= req.HardwareInfo.Memory && core.FreeCPU >= req.HardwareInfo.CPU && core.FreeDisk >= req.HardwareInfo.Disk {
+		if !core.IsAlive {
+			log.Warnf("core %s is not alive, skipping", core.IP)
+			continue
+		}
+		aliveCount++
+
+		memoryOk := core.FreeMemory >= req.HardwareInfo.Memory
+		cpuOk := core.FreeCPU >= req.HardwareInfo.CPU
+		diskOk := core.FreeDisk >= req.HardwareInfo.Disk
+
+		if !memoryOk {
+			log.Warnf("%s !memoryOk: req=%d, available=%d", core.IP, req.HardwareInfo.Memory, core.FreeMemory)
+		}
+		if !cpuOk {
+			log.Warnf("%s !cpuOk   : req=%d, available=%d", core.IP, req.HardwareInfo.CPU, core.FreeCPU)
+		}
+		if !diskOk {
+			log.Warnf("%s !diskOk  : req=%d, available=%d", core.IP, req.HardwareInfo.Disk, core.FreeDisk)
+		}
+
+		if memoryOk && cpuOk && diskOk {
 			selectedCore = core
 			selectedCoreIndex = i
 			log.Infof("core found: %s", selectedCore.IP)
 			break
+		} else {
+			log.Infof("%s rejected: memory=%t, cpu=%t, disk=%t", core.IP, memoryOk, cpuOk, diskOk)
 		}
 	}
 
 	if selectedCore == nil {
-		log.Errorf("selectedCore == nil")
+		log.Errorf("No suitable core found! Total cores: %d, Alive cores: %d, Required: Memory=%d CPU=%d Disk=%d",
+			len(contextStruct.Cores), aliveCount, req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
+
+		if aliveCount > 0 {
+			log.Errorf("alive cores:")
+			for i := range contextStruct.Cores {
+				core := &contextStruct.Cores[i]
+				if core.IsAlive {
+					log.Errorf("  %s: Memory=%d/%d, CPU=%d/%d, Disk=%d/%d",
+						core.IP, core.FreeMemory, core.CoreInfoIdx.Memory, core.FreeCPU, core.CoreInfoIdx.Cpu, core.FreeDisk, core.CoreInfoIdx.Disk)
+				}
+			}
+		} else {
+			log.Errorf("no alive cores available")
+		}
+
 		return errors.New("selectedCore == nil")
 	}
 
@@ -159,8 +200,7 @@ func ShutdownVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 }
 
 func GetVMCpuInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreMachineCpuInfoResponse, error) {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
@@ -183,8 +223,7 @@ func GetVMCpuInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreM
 }
 
 func GetVMMemoryInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreMachineMemoryInfoResponse, error) {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
@@ -207,8 +246,7 @@ func GetVMMemoryInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.Co
 }
 
 func GetVMDiskInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreMachineDiskInfoResponse, error) {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {

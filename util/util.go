@@ -2,15 +2,12 @@ package util
 
 import (
 	"net/http"
-
-	"github.com/sirupsen/logrus"
 )
 
 func CheckMethod(w http.ResponseWriter, r *http.Request, expectedMethod string) bool {
 	if r.Method != expectedMethod {
-		log := logrus.New()
-		log.SetReportCaller(true)
-		
+		log := GetLogger()
+
 		h := w.Header()
 		h.Del("Content-Length")
 		h.Set("Content-Type", "text/plain; charset=utf-8")
@@ -23,4 +20,3 @@ func CheckMethod(w http.ResponseWriter, r *http.Request, expectedMethod string) 
 	}
 	return true
 }
-

@@ -6,12 +6,11 @@ import (
 
 	"github.com/easy-cloud-Knet/KWS_Control/api/model"
 	"github.com/easy-cloud-Knet/KWS_Control/service"
-	"github.com/sirupsen/logrus"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
 func (c *handlerContext) createVm(w http.ResponseWriter, r *http.Request) {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	err := service.CreateVM(w, r, c.context)
 	if err != nil {
@@ -67,8 +66,7 @@ func (c *handlerContext) shutdownVm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *handlerContext) vmStatus(w http.ResponseWriter, r *http.Request) {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	var req model.ApiVmStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -114,8 +112,7 @@ func (c *handlerContext) vmConnect(w http.ResponseWriter, r *http.Request) {
 	//goland:noinspection GoUnhandledErrorResult
 	defer r.Body.Close()
 
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	var req model.ApiVmConnectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
