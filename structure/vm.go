@@ -8,6 +8,7 @@ type Config struct {
 	Cores             []string `yaml:"cores"`
 	Port              int      `yaml:"port"`
 	DB                DBConfig `yaml:"db"`
+	GuacDB            DBConfig `yaml:"guac_db"`
 }
 
 type DBConfig struct {

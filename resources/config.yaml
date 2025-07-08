@@ -13,3 +13,10 @@ db:
   host: "localhost"
   port: 3306
   name: "db"
+
+guac_db:
+  user: "root"
+  password: "password"
+  host: "localhost"
+  port: 3306
+  name: "guacamole_db"

@@ -111,7 +111,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	cleanup := func() {
 		if guacamoleConfigured {
 			log.Info("clean up clean up")
-			if cleanupErr := CleanupGuacamoleConfig(string(req.UUID)); cleanupErr != nil {
+			if cleanupErr := CleanupGuacamoleConfig(string(req.UUID), contextStruct.GuacDB); cleanupErr != nil {
 				log.Errorf("Failed to cleanup Guacamole config during rollback: %v", cleanupErr)
 			}
 		}
@@ -122,7 +122,8 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 			selectedCore.FreeDisk += req.HardwareInfo.Disk
 		}
 	}
-	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), vmIP, privateKeyPEM, contextStruct.Config)
+
+	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), vmIP, privateKeyPEM, contextStruct.GuacDB)
 	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
 
 	if userPass == "" {

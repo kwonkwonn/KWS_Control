@@ -9,6 +9,7 @@ import (
 type ControlContext struct {
 	Config     Config
 	DB         *sql.DB
+	GuacDB     *sql.DB
 	Cores      []Core         // 모든 코어를 관리
 	AliveVM    []*VMInfo      //현재 가동중인 VM의 정보
 	VMLocation map[UUID]*Core //UUID를 기반으로 어떤 VM이 어느 Core에 있는지 확인하는 포인터

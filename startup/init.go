@@ -117,39 +117,90 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 		config.GuacBaseURL = guacBaseUrlEnv
 	}
 
-	dbUser := os.Getenv("DB_USER")
+	// ---------------- Main DB connection -----------------------
+	dbUserMain := os.Getenv("DB_USER")
+	if dbUserMain == "" {
+		dbUserMain = config.DB.User
+		if dbUserMain == "" {
+			dbUserMain = "root"
+		}
+	}
+
+	dbPasswordMain := os.Getenv("DB_PASSWORD")
+	if dbPasswordMain == "" {
+		dbPasswordMain = config.DB.Password
+	}
+
+	dbHostMain := os.Getenv("DB_HOST")
+	if dbHostMain == "" {
+		dbHostMain = config.DB.Host
+		if dbHostMain == "" {
+			dbHostMain = "localhost"
+		}
+	}
+
+	dbPortMain := os.Getenv("DB_PORT")
+	if dbPortMain == "" {
+		if config.DB.Port != 0 {
+			dbPortMain = strconv.Itoa(config.DB.Port)
+		} else {
+			dbPortMain = "3306"
+		}
+	}
+
+	dbNameMain := os.Getenv("DB_NAME")
+	if dbNameMain == "" {
+		dbNameMain = config.DB.Name
+		if dbNameMain == "" {
+			dbNameMain = "db"
+		}
+	}
+
+	dsnMain := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUserMain, dbPasswordMain, dbHostMain, dbPortMain, dbNameMain)
+
+	mainDB, err := sql.Open("mysql", dsnMain)
+	if err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to open generic database connection: %w", err)
+	}
+	if err := mainDB.Ping(); err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to ping generic database: %w", err)
+	}
+
+	// ---------------- Guacamole DB connection --------------------
+
+	dbUser := os.Getenv("GUAC_DB_USER")
 	if dbUser == "" {
-		dbUser = config.DB.User
+		dbUser = config.GuacDB.User
 		if dbUser == "" {
 			dbUser = "root"
 		}
 	}
 
-	dbPassword := os.Getenv("DB_PASSWORD")
+	dbPassword := os.Getenv("GUAC_DB_PASSWORD")
 	if dbPassword == "" {
-		dbPassword = config.DB.Password
+		dbPassword = config.GuacDB.Password
 	}
 
-	dbHost := os.Getenv("DB_HOST")
+	dbHost := os.Getenv("GUAC_DB_HOST")
 	if dbHost == "" {
-		dbHost = config.DB.Host
+		dbHost = config.GuacDB.Host
 		if dbHost == "" {
 			dbHost = "localhost"
 		}
 	}
 
-	dbPort := os.Getenv("DB_PORT")
+	dbPort := os.Getenv("GUAC_DB_PORT")
 	if dbPort == "" {
-		if config.DB.Port != 0 {
-			dbPort = strconv.Itoa(config.DB.Port)
+		if config.GuacDB.Port != 0 {
+			dbPort = strconv.Itoa(config.GuacDB.Port)
 		} else {
 			dbPort = "3306"
 		}
 	}
 
-	dbName := os.Getenv("DB_NAME")
+	dbName := os.Getenv("GUAC_DB_NAME")
 	if dbName == "" {
-		dbName = config.DB.Name
+		dbName = config.GuacDB.Name
 		if dbName == "" {
 			dbName = "guacamole_db"
 		}
@@ -166,7 +217,8 @@ func Initialize(dataPath, configPath string) (structure.ControlContext, error) {
 	}
 
 	infra.Config = config
-	infra.DB = db
+	infra.GuacDB = db
+	infra.DB = mainDB
 	return infra, nil
 }
 
