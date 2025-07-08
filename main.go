@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	_ "os"
 
@@ -8,12 +9,30 @@ import (
 
 	"github.com/easy-cloud-Knet/KWS_Control/api"
 	"github.com/easy-cloud-Knet/KWS_Control/startup"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )
 
 func main() {
 	log := logrus.New()
 	log.SetReportCaller(true)
+
+	ctx := context.Background()
+
+	rdb := redis.NewClient(&redis.Options{
+		Addr: "100.101.247.128:6379", // Docker로 띄운 Redis 주소
+	})
+
+	err := rdb.Set(ctx, "hello", "world", 0).Err()
+	if err != nil {
+		panic(err)
+	}
+
+	val, err := rdb.Get(ctx, "hello").Result()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("hello:", val)
 
 	log.Infof("KWS Control Server Starting...")
 
@@ -26,7 +45,7 @@ func main() {
 	printCores(contextStruct.Cores)
 
 	go func() {
-		err := api.Server(contextStruct.Config.Port, &contextStruct)
+		err := api.Server(contextStruct.Config.Port, &contextStruct, rdb)
 		if err != nil {
 			log.Errorf("Failed to start server: %v", err)
 			panic(err)

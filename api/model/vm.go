@@ -18,3 +18,8 @@ type ApiVmStatusRequest struct {
 type ApiVmConnectRequest struct {
 	UUID structure.UUID `json:"uuid"`
 }
+
+type Redis struct {
+	UUID   structure.UUID `json:"UUID"`
+	Status string         `json:"status"`
+}

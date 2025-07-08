@@ -2,12 +2,17 @@ package structure
 
 type UUID string
 
+func (u UUID) String() any {
+	panic("unimplemented")
+}
+
 type Config struct {
 	VmInternalSubnets []string `yaml:"vm_internal_subnets"`
 	GuacBaseURL       string   `yaml:"guacamole_base_url"`
 	Cores             []string `yaml:"cores"`
 	Port              int      `yaml:"port"`
 	DB                string   `yaml:"db"`
+	Redis             string   `yaml:"redis"`
 }
 
 // memory: GiB

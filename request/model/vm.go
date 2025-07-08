@@ -110,3 +110,15 @@ type GetVMStatusRequest struct {
 	UUID     structure.UUID `json:"UUID"`
 	DataType StatusDataType `json:"dataType"`
 }
+
+type Redis struct {
+	UUID   structure.UUID `json:"UUID"`
+	Status string         `json:"status"`
+}
+
+// type instaceStatus int
+
+// const (
+// 	termincate instaceStatus = iota
+// 	booting
+// )

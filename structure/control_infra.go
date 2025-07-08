@@ -1,6 +1,10 @@
 package structure
 
 import (
+	"fmt"
+	"net"
+	"strings"
+
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
@@ -25,4 +29,52 @@ func (c *ControlContext) FindCoreByVmUUID(uuid UUID) *Core {
 	}
 	log.Errorf("Core not found for VM UUID %s", uuid)
 	return nil
+}
+
+func (c *ControlContext) AssignInternalAddress() (string, error) {
+	var usedIPs = make(map[string]bool)
+
+	// 1. 이미 사용된 IP들을 수집
+	for _, core := range c.Cores {
+		for _, vm := range core.VMInfoIdx {
+			usedIPs[vm.IP_VM] = true
+		}
+	}
+
+	// 2. 서브넷을 순회하며 IP를 생성
+	for _, cidr := range c.Config.VmInternalSubnets {
+		_, ipnet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+
+		for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); incrementIP(ip) {
+			ipStr := ip.String()
+
+			if ipStr == ipnet.IP.String() {
+				continue
+			}
+
+			if strings.HasPrefix(ipStr, "10.5.15.") {
+				lastOctet := ip[3]
+				if lastOctet <= 10 {
+					continue
+				}
+			}
+			if !usedIPs[ipStr] && ipStr != ipnet.IP.String() {
+				return ipStr, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("No IP available for allocation")
+}
+
+func incrementIP(ip net.IP) {
+	for i := len(ip) - 1; i >= 0; i-- {
+		ip[i]++
+		if ip[i] != 0 {
+			break
+		}
+	}
 }
