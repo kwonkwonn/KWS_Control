@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	_ "os"
+
+	"github.com/easy-cloud-Knet/KWS_Control/structure"
 
 	"github.com/easy-cloud-Knet/KWS_Control/api"
 	"github.com/easy-cloud-Knet/KWS_Control/startup"
@@ -38,8 +39,8 @@ func printCores(cores []structure.Core) {
 	for i, core := range cores {
 		fmt.Printf("Core #%d: %s\n", i, core.IP)
 		fmt.Printf("  * IsAlive: %t\n", core.IsAlive)
-		fmt.Printf("  * FreeMemory(MiB): %d\n", core.FreeMemory)
+		fmt.Printf("  * FreeMemory(GiB): %.0f\n", float64(core.FreeMemory)/1024)
 		fmt.Printf("  * FreeCPU: %d\n", core.FreeCPU)
-		fmt.Printf("  * FreeDisk(MiB): %d\n", core.FreeDisk)
+		fmt.Printf("  * FreeDisk(GiB): %.0f\n", float64(core.FreeDisk)/1024)
 	}
 }
