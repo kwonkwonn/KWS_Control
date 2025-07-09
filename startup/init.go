@@ -15,7 +15,7 @@ import (
 	_ "gopkg.in/yaml.v3"
 )
 
-func Initialize(configPath string) (structure.ControlContext, error) {
+func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 	log := logrus.New()
 	log.SetReportCaller(true)
 

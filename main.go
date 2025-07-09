@@ -3,13 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	_ "os"
 
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 
 	"github.com/easy-cloud-Knet/KWS_Control/api"
 	"github.com/easy-cloud-Knet/KWS_Control/startup"
-	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )
 
@@ -19,24 +17,16 @@ func main() {
 
 	ctx := context.Background()
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "100.101.247.128:6379", // Docker로 띄운 Redis 주소
-	})
-
-	err := rdb.Set(ctx, "hello", "world", 0).Err()
+	// Redis 초기화
+	rdb, err := startup.InitializeRedis(ctx, "100.101.247.128:6379")
 	if err != nil {
+		log.Errorf("Failed to initialize Redis: %v", err)
 		panic(err)
 	}
-
-	val, err := rdb.Get(ctx, "hello").Result()
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("hello:", val)
 
 	log.Infof("KWS Control Server Starting...")
 
-	contextStruct, err := startup.Initialize("config.yaml")
+	contextStruct, err := startup.InitializeCoreData("config.yaml")
 	if err != nil {
 		log.Errorf("Failed to initialize: %v", err)
 		panic(err)
