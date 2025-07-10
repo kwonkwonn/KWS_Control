@@ -1,6 +1,9 @@
 package util
 
 import (
+	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -8,9 +11,26 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// 유저 관련 구조체랑 formatter 구조체는 분리해도 무방한데
+// logger 구조체는 분리하면 해결하면 로직이 더 복잡해지는 역참조문제 발생해서
+// 일단은 분리하지는 않을게요.
+
+type UserRequestInfo struct {
+	RequestType string // GET, POST, PUT, DELETE .... 등
+	RequestURI  string // /api/users, /login..
+	UserIP      string // 112.123.123.123
+}
+
 type CustomFormatter struct {
 	BaseFormatter logrus.Formatter
 	ProjectRoot   string
+}
+
+type Logger struct {
+	systemLogger *logrus.Logger
+	infoLogger   *logrus.Logger
+	warnLogger   *logrus.Logger
+	errorLogger  *logrus.Logger
 }
 
 // log message formatting
@@ -20,28 +40,17 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	if entry.Caller != nil {
 		file := entry.Caller.File
 
-		if f.ProjectRoot != "" && strings.Contains(file, f.ProjectRoot) {
-			if idx := strings.Index(file, f.ProjectRoot); idx != -1 {
-				projectRootLen := len(f.ProjectRoot)
-				if idx+projectRootLen < len(file) {
-					file = file[idx+projectRootLen:]
-					if strings.HasPrefix(file, "/") {
-						file = file[1:]
-					}
-				}
-			}
+		if f.ProjectRoot != "" {
+			file = strings.Replace(file, f.ProjectRoot+"/", "", 1)
+			file = strings.Replace(file, f.ProjectRoot, "", 1)
 		}
 
-		if strings.Contains(file, "KWS_Control/") {
-			if idx := strings.Index(file, "KWS_Control/"); idx != -1 {
-				file = file[idx+len("KWS_Control/"):]
-			}
-		}
+		// 저희 레포 이름 안바꾸겠죠..?
+		// 하드코딩 해놓을게요
+		file = strings.Replace(file, "KWS_Control/", "", 1)
 
 		funcName := entry.Caller.Function
-		if strings.Contains(funcName, "github.com/easy-cloud-Knet/KWS_Control/") {
-			funcName = strings.Replace(funcName, "github.com/easy-cloud-Knet/KWS_Control/", "", 1)
-		}
+		funcName = strings.Replace(funcName, "github.com/easy-cloud-Knet/KWS_Control/", "", 1)
 
 		entry.Caller = &runtime.Frame{
 			PC:       entry.Caller.PC,
@@ -54,9 +63,43 @@ func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return f.BaseFormatter.Format(entry)
 }
 
+// 로그파일 뱉는 함수
+func createLoggerWithFile(filename string, projectRoot string) *logrus.Logger {
+	logger := logrus.New()
+	// caller reporting을 비활성화하여 manual handling
+	logger.SetReportCaller(false)
+
+	logDir := "logs"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		fmt.Printf("Failed to create log directory: %v\n", err)
+	}
+
+	logFile := filepath.Join(logDir, filename)
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Printf("Failed to open log file %s: %v\n", logFile, err)
+		logger.SetOutput(os.Stdout)
+	} else {
+		multiWriter := io.MultiWriter(os.Stdout, file)
+		logger.SetOutput(multiWriter)
+	}
+
+	formatter := &CustomFormatter{
+		BaseFormatter: &logrus.TextFormatter{
+			FullTimestamp:   true,
+			TimestampFormat: "2006-01-02 15:04:05", // log파일 저장할 때는 년-월-일 시:분:초
+		},
+		ProjectRoot: projectRoot,
+	}
+
+	logger.SetFormatter(formatter)
+	return logger
+}
+
 func NewLogger() *logrus.Logger {
 	logger := logrus.New()
-	logger.SetReportCaller(true)
+	// caller reporting을 비활성화하여 manual handling
+	logger.SetReportCaller(false)
 
 	_, currentFile, _, _ := runtime.Caller(0)
 	projectRoot := ""
@@ -86,6 +129,159 @@ func NewLogger() *logrus.Logger {
 	return logger
 }
 
-func GetLogger() *logrus.Logger {
-	return NewLogger()
+// NewEnhancedLogger는 파일 저장 기능이 있는 향상된 logger를 생성합니다
+func NewEnhancedLogger() *Logger {
+	_, currentFile, _, _ := runtime.Caller(0)
+	projectRoot := ""
+
+	dir := filepath.Dir(currentFile)
+	for {
+		if strings.HasSuffix(dir, "KWS_Control") {
+			projectRoot = dir
+			break
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return &Logger{
+		systemLogger: NewLogger(),
+		infoLogger:   createLoggerWithFile("info.log", projectRoot),
+		warnLogger:   createLoggerWithFile("warn.log", projectRoot),
+		errorLogger:  createLoggerWithFile("error.log", projectRoot),
+	}
+}
+
+// 아래 info, warn error 모두 로그 출력하고
+// 마지막 인자가 bool이면 save 파라미터로 들감 // 기본값 false
+// UserRequestInfo 구조체가 포함되면 알아서 유저 요청 정보를 포함함
+func (l *Logger) Info(args ...interface{}) {
+	message, save := parseLogArgs(args...)
+	if save {
+		l.infoLogger.Info(message)
+	} else {
+		l.systemLogger.Info(message)
+	}
+}
+
+func (l *Logger) Warn(args ...interface{}) {
+	message, save := parseLogArgs(args...)
+	if save {
+		l.warnLogger.Warn(message)
+	} else {
+		l.systemLogger.Warn(message)
+	}
+}
+
+func (l *Logger) Error(args ...interface{}) {
+	message, save := parseLogArgs(args...)
+	if save {
+		l.errorLogger.Error(message)
+	} else {
+		l.systemLogger.Error(message)
+	}
+}
+
+func (l *Logger) Infof(format string, args ...interface{}) {
+	if _, file, line, ok := runtime.Caller(1); ok {
+		if strings.Contains(file, "KWS_Control/") {
+			file = file[strings.Index(file, "KWS_Control/")+len("KWS_Control/"):]
+		}
+
+		newFormat := fmt.Sprintf("[%s:%d] %s", file, line, format)
+		l.systemLogger.Infof(newFormat, args...)
+	} else {
+		l.systemLogger.Infof(format, args...)
+	}
+}
+
+func (l *Logger) Warnf(format string, args ...interface{}) {
+	if _, file, line, ok := runtime.Caller(1); ok {
+		if strings.Contains(file, "KWS_Control/") {
+			file = file[strings.Index(file, "KWS_Control/")+len("KWS_Control/"):]
+		}
+
+		newFormat := fmt.Sprintf("[%s:%d] %s", file, line, format)
+		l.systemLogger.Warnf(newFormat, args...)
+	} else {
+		l.systemLogger.Warnf(format, args...)
+	}
+}
+
+func (l *Logger) Errorf(format string, args ...interface{}) {
+	if _, file, line, ok := runtime.Caller(1); ok {
+		if strings.Contains(file, "KWS_Control/") {
+			file = file[strings.Index(file, "KWS_Control/")+len("KWS_Control/"):]
+		}
+
+		newFormat := fmt.Sprintf("[%s:%d] %s", file, line, format)
+		l.systemLogger.Errorf(newFormat, args...)
+	} else {
+		l.systemLogger.Errorf(format, args...)
+	}
+}
+
+func (l *Logger) Println(args ...interface{}) {
+	if _, file, line, ok := runtime.Caller(1); ok {
+		if strings.Contains(file, "KWS_Control/") {
+			file = file[strings.Index(file, "KWS_Control/")+len("KWS_Control/"):]
+		}
+
+		message := fmt.Sprint(args...)
+		newMessage := fmt.Sprintf("[%s:%d] %s", file, line, message)
+		l.systemLogger.Info(newMessage)
+	} else {
+		l.systemLogger.Info(args...)
+	}
+}
+
+// 가변 인자를 파싱하여 메시지와 save 플래그를 반환
+// UserRequestInfo 구조체가 있으면 유저 요청 정보를 메시지에 포함
+func parseLogArgs(args ...interface{}) (string, bool) {
+	if len(args) == 0 {
+		return "", false
+	}
+
+	save := false
+	var userRequestInfo *UserRequestInfo
+	var messageArgs []interface{}
+
+	// 인자들 직접 까서 UserRequestInfo, bool, 그리고 메시지 인자들을 분리
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case bool:
+			save = v
+		case UserRequestInfo:
+			userRequestInfo = &v
+		case *UserRequestInfo:
+			userRequestInfo = v
+		default:
+			messageArgs = append(messageArgs, arg)
+		}
+	}
+
+	var messageParts []string
+	for _, arg := range messageArgs {
+		messageParts = append(messageParts, fmt.Sprintf("%v", arg))
+	}
+
+	message := strings.Join(messageParts, " ")
+
+	if userRequestInfo != nil {
+		message = fmt.Sprintf("[%s %s] [%s] %s",
+			userRequestInfo.RequestType, userRequestInfo.RequestURI, userRequestInfo.UserIP, message)
+	}
+
+	return message, save
+}
+
+func GetEnhancedLogger() *Logger {
+	return NewEnhancedLogger()
+}
+
+func GetLogger() *Logger {
+	return NewEnhancedLogger()
 }
