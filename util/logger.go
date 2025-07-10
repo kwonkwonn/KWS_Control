@@ -3,7 +3,6 @@ package util
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,12 +14,6 @@ import (
 // 유저 관련 구조체랑 formatter 구조체는 분리해도 무방한데
 // logger 구조체는 분리하면 해결하면 로직이 더 복잡해지는 역참조문제 발생해서
 // 일단은 분리하지는 않을게요.
-
-type UserRequestInfo struct {
-	RequestType string // GET, POST, PUT, DELETE .... 등
-	RequestURI  string // /api/users, /login..
-	UserIP      string // 112.123.123.123
-}
 
 type CustomFormatter struct {
 	BaseFormatter logrus.Formatter
@@ -174,7 +167,7 @@ func NewEnhancedLogger() *Logger {
 
 // 아래 info, warn error 모두 로그 출력하고
 // 마지막 인자가 bool이면 save 파라미터로 들감 // 기본값 false
-// UserRequestInfo 구조체가 포함되면 알아서 유저 요청 정보를 포함함
+// printf 스타일 포매팅도 지원 (첫번째 인자가 format string이고 % 포함시)
 func (l *Logger) Info(args ...interface{}) {
 	message, save := parseLogArgs(args...)
 	if save {
@@ -202,7 +195,7 @@ func (l *Logger) Error(args ...interface{}) {
 	}
 }
 
-func (l *Logger) Infof(format string, args ...interface{}) {
+func (l *Logger) DebugInfo(format string, args ...interface{}) {
 	if _, file, line, ok := runtime.Caller(1); ok {
 		if strings.Contains(file, "KWS_Control/") {
 			file = file[strings.Index(file, "KWS_Control/")+len("KWS_Control/"):]
@@ -215,7 +208,7 @@ func (l *Logger) Infof(format string, args ...interface{}) {
 	}
 }
 
-func (l *Logger) Warnf(format string, args ...interface{}) {
+func (l *Logger) DebugWarn(format string, args ...interface{}) {
 	if _, file, line, ok := runtime.Caller(1); ok {
 		if strings.Contains(file, "KWS_Control/") {
 			file = file[strings.Index(file, "KWS_Control/")+len("KWS_Control/"):]
@@ -228,7 +221,7 @@ func (l *Logger) Warnf(format string, args ...interface{}) {
 	}
 }
 
-func (l *Logger) Errorf(format string, args ...interface{}) {
+func (l *Logger) DebugError(format string, args ...interface{}) {
 	if _, file, line, ok := runtime.Caller(1); ok {
 		if strings.Contains(file, "KWS_Control/") {
 			file = file[strings.Index(file, "KWS_Control/")+len("KWS_Control/"):]
@@ -256,42 +249,47 @@ func (l *Logger) Println(args ...interface{}) {
 }
 
 // 가변 인자를 파싱하여 메시지와 save 플래그를 반환
-// UserRequestInfo 구조체가 있으면 유저 요청 정보를 메시지에 포함
+// printf 스타일 포매팅 지원: 첫번째 인자가 format string이면 fmt.Sprintf 사용
 func parseLogArgs(args ...interface{}) (string, bool) {
 	if len(args) == 0 {
 		return "", false
 	}
 
 	save := false
-	var userRequestInfo *UserRequestInfo
+	var formatArgs []interface{}
 	var messageArgs []interface{}
 
-	// 인자들 직접 까서 UserRequestInfo, bool, 그리고 메시지 인자들을 분리
+	// bool 인자 분리
+	filteredArgs := make([]interface{}, 0, len(args))
 	for _, arg := range args {
-		switch v := arg.(type) {
-		case bool:
+		if v, ok := arg.(bool); ok {
 			save = v
-		case UserRequestInfo:
-			userRequestInfo = &v
-		case *UserRequestInfo:
-			userRequestInfo = v
-		default:
-			messageArgs = append(messageArgs, arg)
+		} else {
+			filteredArgs = append(filteredArgs, arg)
 		}
 	}
 
+	if len(filteredArgs) == 0 {
+		return "", save
+	}
+
+	// printf 스타일 포매팅 감지
+	if len(filteredArgs) > 1 {
+		if formatStr, ok := filteredArgs[0].(string); ok && strings.Contains(formatStr, "%") {
+			// printf 스타일로 처리
+			formatArgs = filteredArgs[1:]
+			message := fmt.Sprintf(formatStr, formatArgs...)
+			return message, save
+		}
+	}
+
+	messageArgs = filteredArgs
 	var messageParts []string
 	for _, arg := range messageArgs {
 		messageParts = append(messageParts, fmt.Sprintf("%v", arg))
 	}
 
 	message := strings.Join(messageParts, " ")
-
-	if userRequestInfo != nil {
-		message = fmt.Sprintf("[%s %s] [%s] %s",
-			userRequestInfo.RequestType, userRequestInfo.RequestURI, userRequestInfo.UserIP, message)
-	}
-
 	return message, save
 }
 
@@ -301,61 +299,4 @@ func GetEnhancedLogger() *Logger {
 
 func GetLogger() *Logger {
 	return NewEnhancedLogger()
-}
-
-// 요청 정보랑 user info 얻어오는-
-func GetUserRequestInfo(r *http.Request) *UserRequestInfo {
-	clientIP := r.Header.Get("X-Forwarded-For")
-	if clientIP == "" {
-		clientIP = r.Header.Get("X-Real-IP")
-	}
-	if clientIP == "" {
-		clientIP = r.RemoteAddr
-		if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
-			clientIP = clientIP[:idx]
-		}
-	} else {
-		if idx := strings.Index(clientIP, ","); idx != -1 {
-			clientIP = strings.TrimSpace(clientIP[:idx])
-		}
-	}
-
-	return &UserRequestInfo{
-		RequestType: r.Method,
-		RequestURI:  r.RequestURI,
-		UserIP:      clientIP,
-	}
-}
-
-func LogAPIRequest(r *http.Request, message string, args ...interface{}) {
-	log := GetLogger()
-	userInfo := GetUserRequestInfo(r)
-
-	logArgs := []interface{}{*userInfo, message}
-	logArgs = append(logArgs, args...)
-	logArgs = append(logArgs, true)
-
-	log.Info(logArgs...)
-}
-
-func LogAPIError(r *http.Request, message string, args ...interface{}) {
-	log := GetLogger()
-	userInfo := GetUserRequestInfo(r)
-
-	logArgs := []interface{}{*userInfo, message}
-	logArgs = append(logArgs, args...)
-	logArgs = append(logArgs, true)
-
-	log.Error(logArgs...)
-}
-
-func LogAPIWarn(r *http.Request, message string, args ...interface{}) {
-	log := GetLogger()
-	userInfo := GetUserRequestInfo(r)
-
-	logArgs := []interface{}{*userInfo, message}
-	logArgs = append(logArgs, args...)
-	logArgs = append(logArgs, true)
-
-	log.Warn(logArgs...)
 }
