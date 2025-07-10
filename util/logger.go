@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -300,4 +301,61 @@ func GetEnhancedLogger() *Logger {
 
 func GetLogger() *Logger {
 	return NewEnhancedLogger()
+}
+
+// 요청 정보랑 user info 얻어오는-
+func GetUserRequestInfo(r *http.Request) *UserRequestInfo {
+	clientIP := r.Header.Get("X-Forwarded-For")
+	if clientIP == "" {
+		clientIP = r.Header.Get("X-Real-IP")
+	}
+	if clientIP == "" {
+		clientIP = r.RemoteAddr
+		if idx := strings.LastIndex(clientIP, ":"); idx != -1 {
+			clientIP = clientIP[:idx]
+		}
+	} else {
+		if idx := strings.Index(clientIP, ","); idx != -1 {
+			clientIP = strings.TrimSpace(clientIP[:idx])
+		}
+	}
+
+	return &UserRequestInfo{
+		RequestType: r.Method,
+		RequestURI:  r.RequestURI,
+		UserIP:      clientIP,
+	}
+}
+
+func LogAPIRequest(r *http.Request, message string, args ...interface{}) {
+	log := GetLogger()
+	userInfo := GetUserRequestInfo(r)
+
+	logArgs := []interface{}{*userInfo, message}
+	logArgs = append(logArgs, args...)
+	logArgs = append(logArgs, true)
+
+	log.Info(logArgs...)
+}
+
+func LogAPIError(r *http.Request, message string, args ...interface{}) {
+	log := GetLogger()
+	userInfo := GetUserRequestInfo(r)
+
+	logArgs := []interface{}{*userInfo, message}
+	logArgs = append(logArgs, args...)
+	logArgs = append(logArgs, true)
+
+	log.Error(logArgs...)
+}
+
+func LogAPIWarn(r *http.Request, message string, args ...interface{}) {
+	log := GetLogger()
+	userInfo := GetUserRequestInfo(r)
+
+	logArgs := []interface{}{*userInfo, message}
+	logArgs = append(logArgs, args...)
+	logArgs = append(logArgs, true)
+
+	log.Warn(logArgs...)
 }
