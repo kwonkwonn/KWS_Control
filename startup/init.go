@@ -9,15 +9,14 @@ import (
 
 	"github.com/easy-cloud-Knet/KWS_Control/request"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/sirupsen/logrus"
 	_ "gopkg.in/yaml.v3"
 )
 
 func InitializeCoreData(configPath string) (structure.ControlContext, error) {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	var infra structure.ControlContext
 
@@ -94,7 +93,7 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 			if currentCore.CoreInfoIdx.Cpu > 0 {
 				totalCpuCores = currentCore.CoreInfoIdx.Cpu
 			} else {
-				log.Infof("currentCore.CoreInfoIdx.Cpu: %d", currentCore.CoreInfoIdx.Cpu)
+				log.DebugInfo("currentCore.CoreInfoIdx.Cpu: %d", currentCore.CoreInfoIdx.Cpu)
 				totalCpuCores = 9999 // 음 코어를 현재 반환받지 못하는-
 			}
 

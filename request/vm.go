@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/request/model"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
 type CoreClient struct {
@@ -29,8 +29,7 @@ func NewCoreClient(core *structure.Core) *CoreClient {
 }
 
 func (c *CoreClient) doRequest(context context.Context, method, path string, requestBody interface{}, responseBody interface{}) error {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	var reqBodyReader io.Reader
 	if requestBody != nil {

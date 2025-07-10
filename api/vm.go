@@ -7,7 +7,6 @@ import (
 	"github.com/easy-cloud-Knet/KWS_Control/api/model"
 	"github.com/easy-cloud-Knet/KWS_Control/service"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
-	"github.com/sirupsen/logrus"
 )
 
 func (c *handlerContext) createVm(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +20,7 @@ func (c *handlerContext) createVm(w http.ResponseWriter, r *http.Request) {
 		h.Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 
-		log.Errorf("Failed to create VM: %v", err)
+		log.Error("Failed to create VM: %v", err, true)
 
 		return
 	}
@@ -72,7 +71,7 @@ func (c *handlerContext) vmStatus(w http.ResponseWriter, r *http.Request) {
 	var req model.ApiVmStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		log.Errorf("Failed to decode request body: %v", err)
+		log.Error("Failed to decode request body: %v", err, true)
 		return
 	}
 	defer r.Body.Close()
@@ -97,13 +96,13 @@ func (c *handlerContext) vmStatus(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Errorf("Failed to get VM status: %v", err)
+		log.Error("Failed to get VM status: %v", err, true)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Errorf("Failed to encode response: %v", err)
+		log.Error("Failed to encode response: %v", err, true)
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
@@ -118,33 +117,32 @@ func (c *handlerContext) vmConnect(w http.ResponseWriter, r *http.Request) {
 	var req model.ApiVmConnectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		log.Errorf("Failed to decode request body: %v", err)
+		log.Error("Failed to decode request body: %v", err, true)
 		return
 	}
 
 	authToken, err := service.GetGuacamoleToken(req.UUID, c.context)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Errorf("Failed to get Guacamole token: %v", err)
+		log.Error("Failed to get Guacamole token: %v", err, true)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{"authToken": authToken}); err != nil {
-		log.Errorf("Failed to encode response: %v", err)
+		log.Error("Failed to encode response: %v", err, true)
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
 
 }
 func (c *handlerContext) redis(w http.ResponseWriter, r *http.Request) {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	var req model.Redis
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		log.Errorf("Invalid request body: %v", err)
+		log.Error("Invalid request body: %v", err, true)
 		return
 	}
 	defer r.Body.Close()
@@ -157,18 +155,18 @@ func (c *handlerContext) redis(w http.ResponseWriter, r *http.Request) {
 	// Redis에 저장
 	if err := c.rdb.Set(ctx, key, value, 0).Err(); err != nil {
 		http.Error(w, "Failed to update Redis", http.StatusInternalServerError)
-		log.Errorf("Redis SET failed: %v", err)
+		log.Error("Redis SET failed: %v", err, true)
 		return
 	}
 
 	storedValue, err := c.rdb.Get(ctx, key).Result()
 	if err != nil {
 		http.Error(w, "Failed to get value from Redis", http.StatusInternalServerError)
-		log.Errorf("Redis GET failed: %v", err)
+		log.Error("Redis GET failed: %v", err, true)
 		return
 	}
 
-	log.Infof("Redis 확인 완료 - key: %s, value: %s", key, storedValue)
+	log.DebugInfo("Redis 확인 완료 - key: %s, value: %s", key, storedValue)
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("VM status updated in Redis"))

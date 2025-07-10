@@ -75,7 +75,7 @@ func (c *GuacamoleClient) Authenticate(ctx context.Context, username, password s
 	}
 
 	c.authToken = authResponse.AuthToken
-	log.Info("Successfully authenticated with Guacamole")
+	log.Info("Successfully authenticated with Guacamole", true)
 
 	return nil
 }

@@ -24,18 +24,18 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	defer r.Body.Close() // defer << 에러가 발생해도 body가 닫히도록 보장.
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Errorf("err req body parsing: %v", err)
+		log.Error("err req body parsing: %v", err, true)
 		return errors.New("err req body parsing: " + err.Error())
 	}
 
-	log.Infof("func CreateVM() memory=%d GiB, cpu=%d, disk=%d GiB", req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
+	log.Info("func CreateVM() memory=%d GiB, cpu=%d, disk=%d GiB", req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk, true)
 
 	// err = validateCreateVMRequest(req)
 
 	// guacamole 부분 필요
 
 	// 적합한 코어 찾기
-	log.Infof("core selection process. req: memory=%d GiB, cpu=%d, disk=%d",
+	log.DebugInfo("core selection process. req: memory=%d GiB, cpu=%d, disk=%d",
 		req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
 
 	var selectedCore *vms.Core = nil
@@ -44,10 +44,10 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	for i := range contextStruct.Cores {
 		core := &contextStruct.Cores[i]
-		log.Infof("core %s checking: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d, IsAlive=%t", core.IP, core.FreeMemory, core.FreeCPU, core.FreeDisk, core.IsAlive)
+		log.DebugInfo("core %s checking: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d, IsAlive=%t", core.IP, core.FreeMemory, core.FreeCPU, core.FreeDisk, core.IsAlive)
 
 		if !core.IsAlive {
-			log.Warnf("core %s is not alive, skipping", core.IP)
+			log.DebugWarn("core %s is not alive, skipping", core.IP)
 			continue
 		}
 		aliveCount++
@@ -57,47 +57,47 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		diskOk := core.FreeDisk >= req.HardwareInfo.Disk
 
 		if !memoryOk {
-			log.Warnf("%s !memoryOk: req=%d, available=%d", core.IP, req.HardwareInfo.Memory, core.FreeMemory)
+			log.DebugWarn("%s !memoryOk: req=%d, available=%d", core.IP, req.HardwareInfo.Memory, core.FreeMemory)
 		}
 		if !cpuOk {
-			log.Warnf("%s !cpuOk   : req=%d, available=%d", core.IP, req.HardwareInfo.CPU, core.FreeCPU)
+			log.DebugWarn("%s !cpuOk   : req=%d, available=%d", core.IP, req.HardwareInfo.CPU, core.FreeCPU)
 		}
 		if !diskOk {
-			log.Warnf("%s !diskOk  : req=%d, available=%d", core.IP, req.HardwareInfo.Disk, core.FreeDisk)
+			log.DebugWarn("%s !diskOk  : req=%d, available=%d", core.IP, req.HardwareInfo.Disk, core.FreeDisk)
 		}
 
 		if memoryOk && cpuOk && diskOk {
 			selectedCore = core
 			selectedCoreIndex = i
-			log.Infof("core found: %s", selectedCore.IP)
+			log.DebugInfo("core found: %s", selectedCore.IP)
 			break
 		} else {
-			log.Infof("%s rejected: memory=%t, cpu=%t, disk=%t", core.IP, memoryOk, cpuOk, diskOk)
+			log.DebugInfo("%s rejected: memory=%t, cpu=%t, disk=%t", core.IP, memoryOk, cpuOk, diskOk)
 		}
 	}
 
 	if selectedCore == nil {
-		log.Errorf("No suitable core found! Total cores: %d, Alive cores: %d, Required: Memory=%d CPU=%d Disk=%d",
-			len(contextStruct.Cores), aliveCount, req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
+		log.Error("No suitable core found! Total cores: %d, Alive cores: %d, Required: Memory=%d CPU=%d Disk=%d",
+			len(contextStruct.Cores), aliveCount, req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk, true)
 
 		if aliveCount > 0 {
-			log.Errorf("alive cores:")
+			log.DebugError("alive cores:")
 			for i := range contextStruct.Cores {
 				core := &contextStruct.Cores[i]
 				if core.IsAlive {
-					log.Errorf("  %s: Memory=%d/%d, CPU=%d/%d, Disk=%d/%d",
+					log.DebugError("  %s: Memory=%d/%d, CPU=%d/%d, Disk=%d/%d",
 						core.IP, core.FreeMemory, core.CoreInfoIdx.Memory, core.FreeCPU, core.CoreInfoIdx.Cpu, core.FreeDisk, core.CoreInfoIdx.Disk)
 				}
 			}
 		} else {
-			log.Errorf("no alive cores available")
+			log.DebugError("no alive cores available")
 		}
 
 		return errors.New("selectedCore == nil")
 	}
 	var privateKeyPEM, publicKeyOpenSSH, err = GenerateSshKey()
 	if err != nil {
-		log.Errorf("GenerateSshKey() failed: %v", err)
+		log.Error("GenerateSshKey() failed: %v", err, true)
 		return err
 	}
 
@@ -107,9 +107,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	cleanup := func() {
 		if guacamoleConfigured {
-			log.Info("clean up clean up")
+			log.DebugInfo("clean up clean up")
 			if cleanupErr := CleanupGuacamoleConfig(string(req.UUID)); cleanupErr != nil {
-				log.Errorf("Failed to cleanup Guacamole config during rollback: %v", cleanupErr)
+				log.Error("Failed to cleanup Guacamole config during rollback: %v", cleanupErr, true)
 			}
 		}
 		if coreResourcesAllocated {
@@ -122,7 +122,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	instanceIp, err := contextStruct.AssignInternalAddress()
 	if err != nil {
-		log.Errorf("AssignInternalAddress() failed: %v", err)
+		log.Error("AssignInternalAddress() failed: %v", err, true)
 		return err
 	}
 
@@ -133,7 +133,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), instanceIp, privateKeyPEM, contextStruct.Config)
 
 	if userPass == "" {
-		log.Error("Failed to configure Guacamole")
+		log.Error("Failed to configure Guacamole", true)
 		return errors.New("failed to configure Guacamole")
 	}
 	guacamoleConfigured = true
@@ -157,7 +157,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	selectedCore.FreeDisk -= req.HardwareInfo.Disk
 	coreResourcesAllocated = true
 
-	log.Infof("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
+	log.DebugInfo("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
 
 	req.NetConf.Ips = []string{instanceIp}
 	req.NetConf.NetType = 0
@@ -166,7 +166,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	client := request.NewCoreClient(selectedCore)
 	_, err = client.CreateVM(context.Background(), req)
 	if err != nil {
-		log.Errorf("Error creating VM on core %s: %v", selectedCore.IP, err)
+		log.Error("Error creating VM on core %s: %v", selectedCore.IP, err, true)
 		cleanup() // 직접 지우지 말고 요 함수 하나로--
 		return err
 	}
@@ -177,9 +177,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	}
 	contextStruct.VMLocation[req.UUID] = &contextStruct.Cores[selectedCoreIndex]
 	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
-	log.Infof("VM %s added to ControlContext", req.UUID)
+	log.Info("VM %s added to ControlContext", req.UUID, true)
 
-	log.Infof("UUID %s CreateVM request success on core %s", req.UUID, selectedCore.IP)
+	log.Info("UUID %s CreateVM request success on core %s", req.UUID, selectedCore.IP, true)
 	return nil
 }
 
@@ -234,7 +234,7 @@ func GetVMCpuInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreM
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
 		msg := fmt.Sprintf("VM with UUID %s not found", string(uuid))
-		log.Error(msg)
+		log.Error(msg, true)
 		return model.CoreMachineCpuInfoResponse{}, errors.New(msg)
 	}
 
@@ -243,11 +243,11 @@ func GetVMCpuInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreM
 	cpuInfo, err := client.GetVMCpuInfo(context.Background(), uuid)
 	if err != nil {
 		msg := fmt.Sprintf("Error getting CPU info for VM %s on core %s: %v", uuid, core.IP, err)
-		log.Error(msg)
+		log.Error(msg, true)
 		return model.CoreMachineCpuInfoResponse{}, errors.New(msg)
 	}
 
-	log.Infof("Retrieved CPU status for VM %s on core %s", uuid, core.IP)
+	log.DebugInfo("Retrieved CPU status for VM %s on core %s", uuid, core.IP)
 	return cpuInfo, nil
 }
 
@@ -257,7 +257,7 @@ func GetVMMemoryInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.Co
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
 		msg := fmt.Sprintf("VM with UUID %s not found", string(uuid))
-		log.Error(msg)
+		log.Error(msg, true)
 		return model.CoreMachineMemoryInfoResponse{}, errors.New(msg)
 	}
 
@@ -266,11 +266,11 @@ func GetVMMemoryInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.Co
 	memoryInfo, err := client.GetVMMemoryInfo(context.Background(), uuid)
 	if err != nil {
 		msg := fmt.Sprintf("Error getting memory info for VM %s on core %s: %v", uuid, core.IP, err)
-		log.Error(msg)
+		log.Error(msg, true)
 		return model.CoreMachineMemoryInfoResponse{}, errors.New(msg)
 	}
 
-	log.Infof("Retrieved Memory status for VM %s on core %s", uuid, core.IP)
+	log.DebugInfo("Retrieved Memory status for VM %s on core %s", uuid, core.IP)
 	return memoryInfo, nil
 }
 
@@ -280,7 +280,7 @@ func GetVMDiskInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.Core
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
 		msg := fmt.Sprintf("VM with UUID %s not found", string(uuid))
-		log.Error(msg)
+		log.Error(msg, true)
 		return model.CoreMachineDiskInfoResponse{}, errors.New(msg)
 	}
 
@@ -289,10 +289,10 @@ func GetVMDiskInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.Core
 	diskInfo, err := client.GetVMDiskInfo(context.Background(), uuid)
 	if err != nil {
 		msg := fmt.Sprintf("Error getting disk info for VM %s on core %s: %v", uuid, core.IP, err)
-		log.Error(msg)
+		log.Error(msg, true)
 		return model.CoreMachineDiskInfoResponse{}, errors.New(msg)
 	}
 
-	log.Infof("Retrieved Disk status for VM %s on core %s", uuid, core.IP)
+	log.DebugInfo("Retrieved Disk status for VM %s on core %s", uuid, core.IP)
 	return diskInfo, nil
 }

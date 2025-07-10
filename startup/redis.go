@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 	"github.com/redis/go-redis/v9"
-	"github.com/sirupsen/logrus"
 )
 
 // InitializeRedis Redis 클라이언트를 초기화하고 연결을 테스트합니다
 func InitializeRedis(ctx context.Context, redisAddr string) (*redis.Client, error) {
-	log := logrus.New()
-	log.SetReportCaller(true)
+	log := util.GetLogger()
 
 	// Redis 클라이언트 생성
 	rdb := redis.NewClient(&redis.Options{
@@ -29,6 +28,6 @@ func InitializeRedis(ctx context.Context, redisAddr string) (*redis.Client, erro
 		return nil, fmt.Errorf("failed to get test key from Redis: %w", err)
 	}
 
-	log.Infof("Redis connection test successful: hello=%s", val)
+	log.Info("Redis connection test successful: hello=%s", val, true)
 	return rdb, nil
 }

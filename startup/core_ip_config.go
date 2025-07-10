@@ -14,7 +14,7 @@ func readConfig(path string) (structure.Config, error) {
 
 	file, err := os.Open(path)
 	if err != nil {
-		log.Errorf("failed to open config file: %v", err)
+		log.Error("failed to open config file: %v", err, true)
 		return structure.Config{}, fmt.Errorf("failed to open config file: %w", err)
 	}
 

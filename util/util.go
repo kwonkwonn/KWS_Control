@@ -14,7 +14,7 @@ func CheckMethod(w http.ResponseWriter, r *http.Request, expectedMethod string) 
 		h.Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 
-		log.Errorf("Invalid request method: %s", r.Method)
+		log.Error("Invalid request method: %s", r.Method, true)
 
 		return false
 	}

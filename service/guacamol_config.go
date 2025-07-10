@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
@@ -21,7 +20,7 @@ func getDBConnection() string {
 	log := util.GetLogger()
 
 	if err := godotenv.Load(); err != nil {
-		log.Warn(".env file not found,,, using default values")
+		log.DebugWarn(".env file not found,,, using default values")
 	}
 
 	// .env에서 가져옴 or 기본값 사용
@@ -51,21 +50,21 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 
 	db, err := sql.Open("mysql", getDBConnection())
 	if err != nil {
-		log.Warnf("guacamole: failed to establish the database connection: %v", err)
+		log.Error("guacamole: failed to establish the database connection: %v", err, true)
 		return ""
 	}
 	defer db.Close()
 
 	// db테스트먼저
 	if err := db.Ping(); err != nil {
-		log.Warnf("guacamole: database connection test failed: %v", err)
+		log.Error("guacamole: database connection test failed: %v", err, true)
 		return ""
 	}
 
 	// 1. 무작위 비밀번호 생성
 	userPass, err := generateRandomPassword(12)
 	if err != nil {
-		log.Error("guacamole: failed to generate random password:", err)
+		log.Error("guacamole: failed to generate random password:", err, true)
 		return ""
 	}
 	fmt.Println("생성된 비밀번호:", userPass)
@@ -73,7 +72,7 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 	// 2. 32바이트 Salt 생성
 	salt, err := generateRandomSalt(32)
 	if err != nil {
-		log.Error("guacamole: failed to create random salt:", err)
+		log.Error("guacamole: failed to create random salt:", err, true)
 		return ""
 	}
 	fmt.Println("생성된 salt:", hex.EncodeToString(salt))
@@ -84,15 +83,15 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Warnf("guacamole: failed to start transaction: %v", err)
+		log.Error("guacamole: failed to start transaction: %v", err, true)
 		return ""
 	}
 
 	defer func() {
 		if err != nil {
-			log.Warn("guacamole: rolling back transaction due to error")
+			log.DebugWarn("guacamole: rolling back transaction due to error")
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("guacamole: failed to rollback transaction:", rbErr)
+				log.Error("guacamole: failed to rollback transaction:", rbErr, true)
 			}
 		}
 	}()
@@ -102,90 +101,96 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 	var entityID int64
 	var res sql.Result
 	err = tx.QueryRow(`SELECT entity_id FROM guacamole_entity WHERE name = ? AND type = 'USER'`, UUID).Scan(&entityID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// 엔트리가 존재하지 않아야 새로 생성하도록--
-			res, err = tx.Exec(`INSERT INTO guacamole_entity (name, type) VALUES (?, 'USER')`, UUID) // 근데 이렇게 쌩으로 sql넣는 거 맞나요..?
-			if err != nil {
-				log.Error("guacamole: failed to create an entity:", err)
-				return ""
-			}
-			entityID, err = res.LastInsertId()
-			if err != nil {
-				log.Error("guacamole: failed to retrieve entity id:", err)
-				return ""
-			}
-			log.Info("guacamole: created new entity with ID:", entityID)
-		} else {
-			log.Error("guacamole: failed to check existing entity:", err)
+	if err == sql.ErrNoRows {
+		// Entity가 없으면 새로 생성
+		res, err = tx.Exec(`INSERT INTO guacamole_entity (name, type) VALUES (?, 'USER')`, UUID)
+		if err != nil {
+			log.Error("guacamole: failed to create an entity:", err, true)
 			return ""
 		}
+
+		entityID, err = res.LastInsertId()
+		if err != nil {
+			log.Error("guacamole: failed to retrieve entity id:", err, true)
+			return ""
+		}
+		log.DebugInfo("guacamole: created new entity with ID: %d", entityID)
+	} else if err != nil {
+		log.Error("guacamole: failed to check existing entity:", err, true)
+		return ""
 	} else {
-		log.Info("guacamole: using existing entity with ID:", entityID)
+		// Entity가 이미 존재
+		log.DebugInfo("guacamole: using existing entity with ID: %d", entityID)
 	}
 
-	// 5. User 생성 (salt 포함)
+	// 5. User 생성
 	_, err = tx.Exec(`
-		INSERT INTO guacamole_user (entity_id, full_name, password_hash, password_salt, password_date)
-		VALUES (?, ?, UNHEX(?), UNHEX(?), ?)
-	`, entityID, Username, passwordHash, saltHex, time.Now())
+		INSERT INTO guacamole_user (entity_id, password_hash, password_salt, password_date)
+		VALUES (?, ?, UNHEX(?), NOW())
+		ON DUPLICATE KEY UPDATE
+		password_hash = VALUES(password_hash),
+		password_salt = VALUES(password_salt),
+		password_date = VALUES(password_date)
+	`, entityID, passwordHash, saltHex)
 	if err != nil {
-		log.Error("guacamole: failed to create user:", err)
+		log.Error("guacamole: failed to create user:", err, true)
 		return ""
 	}
-	fmt.Println("User 생성 완료")
 
-	// 6. SSH Connection 생성
+	// 6. Connection 생성
+	connectionName := fmt.Sprintf("%s-ssh", UUID)
 	res, err = tx.Exec(`
 		INSERT INTO guacamole_connection (connection_name, protocol)
 		VALUES (?, 'ssh')
-	`, "My SSH Connection")
+		ON DUPLICATE KEY UPDATE connection_name = VALUES(connection_name)
+	`, connectionName)
 	if err != nil {
-		log.Error("guacamole: failed to create connection:", err)
+		log.Error("guacamole: failed to create connection:", err, true)
 		return ""
 	}
-	connID, err := res.LastInsertId()
-	if err != nil {
-		log.Error("guacamole: failed to retrieve connection id:", err)
-		return ""
-	}
-	fmt.Println("Connection 생성 완료, ID:", connID)
 
-	// 7. Connection Parameter 설정
-	params := map[string]string{
+	connectionID, err := res.LastInsertId()
+	if err != nil {
+		log.Error("guacamole: failed to retrieve connection id:", err, true)
+		return ""
+	}
+
+	// 7. Connection parameters 설정
+	parameters := map[string]string{
 		"hostname":    Ip,
 		"port":        "22",
-		"username":    Username,
+		"username":    "root",
 		"private-key": PrivateKey,
 	}
-	for name, value := range params {
+
+	for name, value := range parameters {
 		_, err = tx.Exec(`
 			INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value)
 			VALUES (?, ?, ?)
-		`, connID, name, value)
+			ON DUPLICATE KEY UPDATE parameter_value = VALUES(parameter_value)
+		`, connectionID, name, value)
 		if err != nil {
-			log.Errorf("guacamole: failed to set parameter %s: %v", name, err)
+			log.Error("guacamole: failed to set parameter %s: %v", name, err, true)
 			return ""
 		}
 	}
-	fmt.Println("Connection Parameter 설정 완료")
 
-	// 8. 권한 부여
+	// 8. User에게 Connection 권한 부여
 	_, err = tx.Exec(`
 		INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission)
 		VALUES (?, ?, 'READ')
-	`, entityID, connID)
+		ON DUPLICATE KEY UPDATE permission = VALUES(permission)
+	`, entityID, connectionID)
 	if err != nil {
-		log.Error("guacamole: failed to grant permission:", err)
+		log.Error("guacamole: failed to grant permission:", err, true)
 		return ""
 	}
 
+	// 9. 트랜잭션 커밋
 	if err = tx.Commit(); err != nil {
-		log.Error("guacamole: failed to commit transaction:", err)
+		log.Error("guacamole: failed to commit transaction:", err, true)
 		return ""
 	}
-
-	fmt.Println("Permission 부여 완료")
 
 	return userPass
 }
@@ -228,67 +233,67 @@ func CleanupGuacamoleConfig(UUID string) error {
 
 	db, err := sql.Open("mysql", getDBConnection())
 	if err != nil {
-		log.Warnf("failed to establish database connection: %v", err)
-		return err
+		log.Error("failed to establish database connection: %v", err, true)
+		return fmt.Errorf("failed to establish database connection: %w", err)
 	}
 	defer db.Close()
 
 	if err := db.Ping(); err != nil {
-		log.Warnf("database connection test failed: %v", err)
-		return err
+		log.Error("database connection test failed: %v", err, true)
+		return fmt.Errorf("database connection test failed: %w", err)
 	}
 
 	tx, err := db.Begin()
 	if err != nil {
-		log.Warnf("failed to start transaction: %v", err)
-		return err
+		log.Error("failed to start transaction: %v", err, true)
+		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 
 	defer func() {
 		if err != nil {
-			log.Warn("rolling back transaction due to error")
+			log.DebugWarn("rolling back transaction due to error")
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("failed to rollback transaction:", rbErr)
+				log.Error("failed to rollback transaction:", rbErr, true)
 			}
 		}
 	}()
 
-	// entity_id 찾고
+	// Entity ID 찾기
 	var entityID int64
 	err = tx.QueryRow(`SELECT entity_id FROM guacamole_entity WHERE name = ? AND type = 'USER'`, UUID).Scan(&entityID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			log.Infof("no entity found for UUID %s, nothing to clean up", UUID)
-			return nil // gpt << 예외처리왤케잘하죠 이런 것도 챙겨주네 없어서 나쁠 건 없으니 남길게요
-		}
-		log.Errorf("failed to find entity for UUID %s: %v", UUID, err)
-		return err
+	if err == sql.ErrNoRows {
+		log.DebugInfo("no entity found for UUID %s, nothing to clean up", UUID)
+		return nil
+	} else if err != nil {
+		log.Error("failed to find entity for UUID %s: %v", UUID, err, true)
+		return fmt.Errorf("failed to find entity for UUID %s: %w", UUID, err)
 	}
 
-	// 관련 레코드들 알잘딱 삭제하고
+	// Entity 삭제 // cascade로 user도 같이 삭제
 	_, err = tx.Exec(`DELETE FROM guacamole_entity WHERE entity_id = ?`, entityID)
 	if err != nil {
-		log.Errorf("failed to delete entity for UUID %s: %v", UUID, err)
-		return err
+		log.Error("failed to delete entity for UUID %s: %v", UUID, err, true)
+		return fmt.Errorf("failed to delete entity for UUID %s: %w", UUID, err)
 	}
 
+	// UUID와 관련된 orphaned connections 정리
+	connectionName := fmt.Sprintf("%s-ssh", UUID)
 	_, err = tx.Exec(`
 		DELETE FROM guacamole_connection 
-		WHERE connection_id NOT IN (
-			SELECT DISTINCT connection_id 
-			FROM guacamole_connection_permission
+		WHERE connection_name = ? AND connection_id NOT IN (
+			SELECT DISTINCT connection_id FROM guacamole_connection_permission
 		)
-	`)
+	`, connectionName)
 	if err != nil {
-		log.Errorf("failed to delete orphaned connections: %v", err)
-		return err
+		log.Error("failed to delete orphaned connections: %v", err, true)
+		return fmt.Errorf("failed to delete orphaned connections: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		log.Errorf("failed to commit transaction: %v", err)
-		return err
+		log.Error("failed to commit transaction: %v", err, true)
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Infof("successfully cleaned up configuration for UUID %s", UUID)
+	log.Info("successfully cleaned up configuration for UUID %s", UUID, true)
 	return nil
 }
