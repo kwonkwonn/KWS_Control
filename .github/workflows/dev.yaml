@@ -31,5 +31,9 @@ jobs:
           -e DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
           -e DB_HOST="${{ secrets.DB_HOST }}" \
           -e DB_NAME="${{ secrets.DB_NAME }}" \
+          -e GUAC_DB_USER="${{ secrets.GUAC_DB_USER }}" \
+          -e GUAC_DB_PASSWORD="${{ secrets.GUAC_DB_PASSWORD }}" \
+          -e GUAC_DB_HOST="${{ secrets.GUAC_DB_HOST }}" \
+          -e GUAC_DB_NAME="${{ secrets.GUAC_DB_NAME }}" \
           $IMAGE
         docker system prune -af
