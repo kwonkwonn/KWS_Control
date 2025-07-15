@@ -107,9 +107,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	cleanup := func() {
 		if guacamoleConfigured {
-			log.DebugInfo("clean up clean up")
-			if cleanupErr := CleanupGuacamoleConfig(string(req.UUID)); cleanupErr != nil {
-				log.Error("Failed to cleanup Guacamole config during rollback: %v", cleanupErr, true)
+			log.Info("clean up clean up")
+			if cleanupErr := CleanupGuacamoleConfig(string(req.UUID), contextStruct.GuacDB); cleanupErr != nil {
+				log.Error("Failed to cleanup Guacamole config during rollback: %v", cleanupErr)
 			}
 		}
 		if coreResourcesAllocated {
@@ -127,10 +127,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	}
 
 	fmt.Printf("AssignInternalAddress(): %s", instanceIp)
-	GuacamoleConfig(req.Users[0].Name, string(req.UUID), instanceIp, privateKeyPEM, contextStruct.Config)
 	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
 
-	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), instanceIp, privateKeyPEM, contextStruct.Config)
+	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), instanceIp, privateKeyPEM, contextStruct.GuacDB)
 
 	if userPass == "" {
 		log.Error("Failed to configure Guacamole", true)

@@ -7,57 +7,17 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
 )
 
-func getDBConnection() string {
+func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string, db *sql.DB) string {
 	log := util.GetLogger()
 
-	if err := godotenv.Load(); err != nil {
-		log.DebugWarn(".env file not found,,, using default values")
-	}
-
-	// .env에서 가져옴 or 기본값 사용
-	dbUser := getEnvOrDefault("DB_USER", "root")
-	dbPassword := getEnvOrDefault("DB_PASSWORD", "password")
-	dbHost := getEnvOrDefault("DB_HOST", "localhost")
-	dbPort := getEnvOrDefault("DB_PORT", "3306")
-	dbName := getEnvOrDefault("DB_NAME", "guacamole_db")
-
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
-		dbUser, dbPassword, dbHost, dbPort, dbName)
-
-	fmt.Println(dsn)
-
-	return dsn
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultValue
-}
-
-func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string, config structure.Config) string {
-	log := util.GetLogger()
-
-	db, err := sql.Open("mysql", getDBConnection())
-	if err != nil {
-		log.Error("guacamole: failed to establish the database connection: %v", err, true)
-		return ""
-	}
-	defer db.Close()
-
-	// db테스트먼저
-	if err := db.Ping(); err != nil {
-		log.Error("guacamole: database connection test failed: %v", err, true)
+	if db == nil {
+		log.Error("guacamole: db connection is nil")
 		return ""
 	}
 
@@ -227,15 +187,13 @@ func generateRandomPassword(length int) (string, error) {
 }
 
 // 뭔가뭔가 문제가 생겼을 때, 지우는 무언가
-func CleanupGuacamoleConfig(UUID string) error {
+func CleanupGuacamoleConfig(UUID string, db *sql.DB) error {
 	log := util.GetLogger()
 
-	db, err := sql.Open("mysql", getDBConnection())
-	if err != nil {
-		log.Error("failed to establish database connection: %v", err, true)
-		return fmt.Errorf("failed to establish database connection: %w", err)
+	if db == nil {
+		log.Error("failed to establish database connection: db is nil")
+		return fmt.Errorf("db is nil")
 	}
-	defer db.Close()
 
 	if err := db.Ping(); err != nil {
 		log.Error("database connection test failed: %v", err, true)

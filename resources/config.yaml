@@ -1,0 +1,22 @@
+vm_internal_subnets:
+  - "127.0.0.1/24"
+
+cores:
+  - "192.168.0.10:12345"
+
+guacamole_base_url: "http://localhost/guacamole"
+port: 8081
+
+db:
+  user: "root"
+  password: "password"
+  host: "localhost"
+  port: 3306
+  name: "db"
+
+guac_db:
+  user: "root"
+  password: "password"
+  host: "localhost"
+  port: 3306
+  name: "guacamole_db"

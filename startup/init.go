@@ -2,6 +2,7 @@ package startup
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 	"golang.org/x/sync/errgroup"
 
+	_ "github.com/go-sql-driver/mysql"
 	_ "gopkg.in/yaml.v3"
 )
 
@@ -126,7 +128,108 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 		config.GuacBaseURL = guacBaseUrlEnv
 	}
 
+	// ---------------- Main DB connection -----------------------
+	dbUserMain := os.Getenv("DB_USER")
+	if dbUserMain == "" {
+		dbUserMain = config.DB.User
+		if dbUserMain == "" {
+			dbUserMain = "root"
+		}
+	}
+
+	dbPasswordMain := os.Getenv("DB_PASSWORD")
+	if dbPasswordMain == "" {
+		dbPasswordMain = config.DB.Password
+	}
+
+	dbHostMain := os.Getenv("DB_HOST")
+	if dbHostMain == "" {
+		dbHostMain = config.DB.Host
+		if dbHostMain == "" {
+			dbHostMain = "localhost"
+		}
+	}
+
+	dbPortMain := os.Getenv("DB_PORT")
+	if dbPortMain == "" {
+		if config.DB.Port != 0 {
+			dbPortMain = strconv.Itoa(config.DB.Port)
+		} else {
+			dbPortMain = "3306"
+		}
+	}
+
+	dbNameMain := os.Getenv("DB_NAME")
+	if dbNameMain == "" {
+		dbNameMain = config.DB.Name
+		if dbNameMain == "" {
+			dbNameMain = "db"
+		}
+	}
+
+	dsnMain := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUserMain, dbPasswordMain, dbHostMain, dbPortMain, dbNameMain)
+
+	mainDB, err := sql.Open("mysql", dsnMain)
+	if err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to open generic database connection: %w", err)
+	}
+	if err := mainDB.Ping(); err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to ping generic database: %w", err)
+	}
+
+	// ---------------- Guacamole DB connection --------------------
+
+	dbUser := os.Getenv("GUAC_DB_USER")
+	if dbUser == "" {
+		dbUser = config.GuacDB.User
+		if dbUser == "" {
+			dbUser = "root"
+		}
+	}
+
+	dbPassword := os.Getenv("GUAC_DB_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = config.GuacDB.Password
+	}
+
+	dbHost := os.Getenv("GUAC_DB_HOST")
+	if dbHost == "" {
+		dbHost = config.GuacDB.Host
+		if dbHost == "" {
+			dbHost = "localhost"
+		}
+	}
+
+	dbPort := os.Getenv("GUAC_DB_PORT")
+	if dbPort == "" {
+		if config.GuacDB.Port != 0 {
+			dbPort = strconv.Itoa(config.GuacDB.Port)
+		} else {
+			dbPort = "3306"
+		}
+	}
+
+	dbName := os.Getenv("GUAC_DB_NAME")
+	if dbName == "" {
+		dbName = config.GuacDB.Name
+		if dbName == "" {
+			dbName = "guacamole_db"
+		}
+	}
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUser, dbPassword, dbHost, dbPort, dbName)
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to open database connection: %w", err)
+	}
+	if err := db.Ping(); err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to ping database: %w", err)
+	}
+
 	infra.Config = config
+	infra.GuacDB = db
+	infra.DB = mainDB
 	return infra, nil
 }
 
