@@ -19,7 +19,7 @@ func main() {
 	// Redis 초기화
 	// 환경변수로 빼기 전까지는 로컬호스트로 하드코딩 해놓을게요.
 	// 기존에 있던 contol 개발서버에 redis 접근에는 문제가 있었습니다.
-	rdb, err := startup.InitializeRedis(ctx, "localhost:6379")
+	rdb, err := startup.InitializeRedis(ctx, "100.101.247.128:6379")
 	if err != nil {
 		log.Error("Failed to initialize Redis: %v", err, true)
 		panic(err)
