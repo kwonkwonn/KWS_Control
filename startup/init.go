@@ -24,11 +24,7 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 	var infra structure.ControlContext
 
 	// 모든 Core 정의
-	infra.VMLocation = make(map[structure.UUID]*structure.Core)
 	for i := range infra.Cores {
-		for vmUUID := range infra.Cores[i].VMInfoIdx {
-			infra.VMLocation[vmUUID] = &infra.Cores[i]
-		}
 		infra.Cores[i].IsAlive = false
 	}
 
@@ -100,21 +96,13 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 				totalCpuCores = 9999 // 음 코어를 현재 반환받지 못하는-
 			}
 
-			allocatedCpuCores := uint32(0)
-			if currentCore.VMInfoIdx != nil {
-				for _, vm := range currentCore.VMInfoIdx {
-					allocatedCpuCores += vm.Cpu
-				}
-			}
-			freeCpuCores := totalCpuCores - allocatedCpuCores
-
 			currentCore.CoreInfoIdx.Cpu = totalCpuCores
 			currentCore.CoreInfoIdx.Memory = totalMemoryMiB
 			currentCore.CoreInfoIdx.Disk = totalDiskMiB
 
 			currentCore.FreeDisk = freeDiskMiB
 			currentCore.FreeMemory = freeMemoryMiB
-			currentCore.FreeCPU = freeCpuCores
+			currentCore.FreeCPU = totalCpuCores // loadExistingVMs에서 이미 VM에 할당된 CPU를 제외함
 
 			return nil
 		})
@@ -185,6 +173,11 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 		return structure.ControlContext{}, fmt.Errorf("failed to ping generic database: %w", err)
 	}
 
+	if loadErr := loadExistingVMs(mainDB, &infra); loadErr != nil {
+		log.DebugError("failed to load existing VMs from DB: %v", loadErr)
+		// We tolerate this error but continue startup – DB might be empty.
+	}
+
 	// ---------------- Guacamole DB connection --------------------
 
 	dbUser := os.Getenv("GUAC_DB_USER")
@@ -248,4 +241,69 @@ func findCore(cores []structure.Core, ip string, port uint16) *structure.Core {
 		}
 	}
 	return nil
+}
+
+func loadExistingVMs(db *sql.DB, infra *structure.ControlContext) error {
+	const q = `SELECT uuid, core_ip, core_port, ip_vm, guac_password, memory_mib, cpu_cores, disk_mib, is_alive FROM vm_info`
+
+	rows, err := db.Query(q)
+	if err != nil {
+		return fmt.Errorf("loadExistingVMs: %w", err)
+	}
+	defer rows.Close()
+
+	type alloc struct{ cpu, mem, disk uint32 }
+	allocPerCore := make(map[string]alloc) // key: ip:port
+
+	for rows.Next() {
+		var (
+			uuidStr      string
+			coreIP       string
+			corePortUint uint16
+			ipvm         string
+			guacPassword string
+			memMiB       uint32
+			cpuCores     uint32
+			diskMiB      uint32
+			isAliveInt   int
+		)
+
+		if err := rows.Scan(&uuidStr, &coreIP, &corePortUint, &ipvm, &guacPassword, &memMiB, &cpuCores, &diskMiB, &isAliveInt); err != nil {
+			return fmt.Errorf("loadExistingVMs scan: %w", err)
+		}
+
+		_ = uuidStr
+
+		core := findCore(infra.Cores, coreIP, corePortUint)
+		if core == nil {
+			newCore := structure.Core{
+				IP:      coreIP,
+				Port:    corePortUint,
+				IsAlive: false,
+			}
+			infra.Cores = append(infra.Cores, newCore)
+			core = &infra.Cores[len(infra.Cores)-1]
+		}
+
+		// no in-memory VM map
+
+		key := fmt.Sprintf("%s:%d", coreIP, corePortUint)
+		a := allocPerCore[key]
+		a.cpu += cpuCores
+		a.mem += memMiB
+		a.disk += diskMiB
+		allocPerCore[key] = a
+	}
+
+	for i := range infra.Cores {
+		core := &infra.Cores[i]
+		key := fmt.Sprintf("%s:%d", core.IP, core.Port)
+		if alloc, ok := allocPerCore[key]; ok {
+			if core.FreeCPU >= alloc.cpu {
+				core.FreeCPU -= alloc.cpu
+			}
+		}
+	}
+
+	return rows.Err()
 }

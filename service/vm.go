@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 
 	"github.com/easy-cloud-Knet/KWS_Control/request"
 	"github.com/easy-cloud-Knet/KWS_Control/request/model"
@@ -39,7 +38,6 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
 
 	var selectedCore *vms.Core = nil
-	selectedCoreIndex := -1
 	aliveCount := 0
 
 	for i := range contextStruct.Cores {
@@ -68,7 +66,6 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 		if memoryOk && cpuOk && diskOk {
 			selectedCore = core
-			selectedCoreIndex = i
 			log.DebugInfo("core found: %s", selectedCore.IP)
 			break
 		} else {
@@ -113,7 +110,6 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 			}
 		}
 		if coreResourcesAllocated {
-			delete(selectedCore.VMInfoIdx, req.UUID)
 			selectedCore.FreeMemory += req.HardwareInfo.Memory
 			selectedCore.FreeCPU += req.HardwareInfo.CPU
 			selectedCore.FreeDisk += req.HardwareInfo.Disk
@@ -144,13 +140,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		Cpu:          req.HardwareInfo.CPU,
 		Disk:         req.HardwareInfo.Disk,
 		IP_VM:        instanceIp,
+		IsAlive:      true,
 	}
 
-	// selected core 상태 업데이트
-	if selectedCore.VMInfoIdx == nil {
-		selectedCore.VMInfoIdx = make(map[vms.UUID]*vms.VMInfo)
-	}
-	selectedCore.VMInfoIdx[req.UUID] = newVM
 	selectedCore.FreeMemory -= req.HardwareInfo.Memory
 	selectedCore.FreeCPU -= req.HardwareInfo.CPU
 	selectedCore.FreeDisk -= req.HardwareInfo.Disk
@@ -170,14 +162,12 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return err
 	}
 
-	// ControlContext global 상태 업데이트
-	if contextStruct.VMLocation == nil {
-		contextStruct.VMLocation = make(map[vms.UUID]*vms.Core)
+	if dbErr := InsertVMInfo(contextStruct.DB, newVM, selectedCore.IP, selectedCore.Port); dbErr != nil {
+		log.Error("failed to persist VM %s to MySQL: %v", req.UUID, dbErr, true)
+		return fmt.Errorf("persisting VM to database failed: %w", dbErr)
 	}
-	contextStruct.VMLocation[req.UUID] = &contextStruct.Cores[selectedCoreIndex]
-	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
-	log.Info("VM %s added to ControlContext", req.UUID, true)
 
+	log.Info("VM %s added and persisted to DB", req.UUID, true)
 	log.Info("UUID %s CreateVM request success on core %s", req.UUID, selectedCore.IP, true)
 	return nil
 }
@@ -193,6 +183,16 @@ func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 		UUID: uuid,
 		Type: model.HardDelete,
 	})
+
+	if err == nil {
+		_ = DeleteVMInfo(contextStruct.DB, uuid)
+
+		if mem, cpu, disk, e := GetVMHardware(contextStruct.DB, uuid); e == nil {
+			core.FreeMemory += mem
+			core.FreeCPU += cpu
+			core.FreeDisk += disk
+		}
+	}
 
 	return err
 }
@@ -212,17 +212,7 @@ func ShutdownVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 		return err
 	}
 
-	foundIndex := -1
-	for i, vm := range contextStruct.AliveVM {
-		if vm.UUID == uuid {
-			foundIndex = i
-			break
-		}
-	}
-
-	if foundIndex != -1 {
-		contextStruct.AliveVM = slices.Delete(contextStruct.AliveVM, foundIndex, foundIndex+1)
-	}
+	_ = SetVMAlive(contextStruct.DB, uuid, false)
 
 	return nil
 }
