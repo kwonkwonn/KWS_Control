@@ -3,7 +3,7 @@ package structure
 type UUID string
 
 func (u UUID) String() any {
-	panic("unimplemented")
+	return string(u)
 }
 
 type Config struct {

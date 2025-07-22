@@ -23,110 +23,9 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 
 	var infra structure.ControlContext
 
-	// 모든 Core 정의
-	infra.VMLocation = make(map[structure.UUID]*structure.Core)
-	for i := range infra.Cores {
-		for vmUUID := range infra.Cores[i].VMInfoIdx {
-			infra.VMLocation[vmUUID] = &infra.Cores[i]
-		}
-		infra.Cores[i].IsAlive = false
-	}
-
-	// config에 설정된 코어에 대해서 정보 업데이트
 	config, err := readConfig(configPath)
 	if err != nil {
 		return structure.ControlContext{}, fmt.Errorf("failed to read config file %s: %w", configPath, err)
-	}
-
-	// 환경변수에서 먼저 설정을 불러오고 값이 없을 때만 config 파일에서 가져옴
-	var coreAddresses []string
-	coresEnv := os.Getenv("CORES")
-	if coresEnv != "" {
-		coreAddresses = strings.Split(coresEnv, ",")
-	} else {
-		coreAddresses = config.Cores
-	}
-
-	g, ctx := errgroup.WithContext(context.Background())
-	for _, coreAddress := range coreAddresses {
-		parts := strings.Split(coreAddress, ":")
-		if len(parts) != 2 {
-			return structure.ControlContext{}, fmt.Errorf("invalid core address format in '%s': expected ip:port", coreAddress)
-		}
-		ip := parts[0]
-		port, err := strconv.Atoi(parts[1])
-		if err != nil {
-			return structure.ControlContext{}, fmt.Errorf("error converting port number from %s: %w", coreAddress, err)
-		}
-
-		core := findCore(infra.Cores, ip, uint16(port))
-		if core == nil {
-			newCore := structure.Core{
-				IP:      ip,
-				Port:    uint16(port),
-				IsAlive: true,
-			}
-			infra.Cores = append(infra.Cores, newCore)
-			core = &infra.Cores[len(infra.Cores)-1]
-		} else {
-			core.IsAlive = true
-		}
-
-		currentCore := core
-		g.Go(func() error {
-			client := request.NewCoreClient(currentCore)
-
-			memResp, err := client.GetCoreMachineMemoryInfo(ctx)
-			if err != nil {
-				currentCore.IsAlive = false
-				return fmt.Errorf("failed to get Memory info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
-			}
-			diskResp, err := client.GetCoreMachineDiskInfo(ctx)
-			if err != nil {
-				currentCore.IsAlive = false
-				return fmt.Errorf("failed to get Disk info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
-			}
-
-			totalMemoryMiB := uint32(memResp.Total * 1024)
-			totalDiskMiB := uint32(diskResp.Total * 1024)
-			freeMemoryMiB := uint32(memResp.Available * 1024)
-			freeDiskMiB := uint32(diskResp.Free * 1024)
-
-			var totalCpuCores uint32
-			if currentCore.CoreInfoIdx.Cpu > 0 {
-				totalCpuCores = currentCore.CoreInfoIdx.Cpu
-			} else {
-				log.DebugInfo("currentCore.CoreInfoIdx.Cpu: %d", currentCore.CoreInfoIdx.Cpu)
-				totalCpuCores = 9999 // 음 코어를 현재 반환받지 못하는-
-			}
-
-			allocatedCpuCores := uint32(0)
-			if currentCore.VMInfoIdx != nil {
-				for _, vm := range currentCore.VMInfoIdx {
-					allocatedCpuCores += vm.Cpu
-				}
-			}
-			freeCpuCores := totalCpuCores - allocatedCpuCores
-
-			currentCore.CoreInfoIdx.Cpu = totalCpuCores
-			currentCore.CoreInfoIdx.Memory = totalMemoryMiB
-			currentCore.CoreInfoIdx.Disk = totalDiskMiB
-
-			currentCore.FreeDisk = freeDiskMiB
-			currentCore.FreeMemory = freeMemoryMiB
-			currentCore.FreeCPU = freeCpuCores
-
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		return structure.ControlContext{}, fmt.Errorf("failed to get core info: %w", err)
-	}
-
-	guacBaseUrlEnv := os.Getenv("GUACAMOLE_BASE_URL")
-	if guacBaseUrlEnv != "" {
-		config.GuacBaseURL = guacBaseUrlEnv
 	}
 
 	// ---------------- Main DB connection -----------------------
@@ -170,11 +69,11 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 
 	dsnMain := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUserMain, dbPasswordMain, dbHostMain, dbPortMain, dbNameMain)
 
-	log.DebugInfo("database connection info: %s:%s@tcp(%s:%s)/%s", dbUserMain, dbPasswordMain, dbHostMain, dbPortMain, dbNameMain)
+	log.Info("database connection info: %s:%s@tcp(%s:%s)/%s", dbUserMain, dbPasswordMain, dbHostMain, dbPortMain, dbNameMain)
 	mainDB, err := sql.Open("mysql", dsnMain)
 
-	log.DebugInfo("generic database connection opened")
-	log.DebugInfo("generic database stats: %v", mainDB.Stats())
+	log.Info("generic database connection opened", true)
+	log.Info("generic database stats: %v", mainDB.Stats(), true)
 
 	if err != nil {
 		log.DebugError("failed to open generic database connection: %v", err)
@@ -238,6 +137,119 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 	infra.Config = config
 	infra.GuacDB = db
 	infra.DB = mainDB
+
+	// 모든 Core 정의
+	infra.VMLocation = make(map[structure.UUID]*structure.Core)
+	for i := range infra.Cores {
+		for vmUUID := range infra.Cores[i].VMInfoIdx {
+			infra.VMLocation[vmUUID] = &infra.Cores[i]
+		}
+		infra.Cores[i].IsAlive = false
+	}
+
+	// config에 설정된 코어에 대해서 정보 업데이트
+
+	// 환경변수에서 먼저 설정을 불러오고 값이 없을 때만 config 파일에서 가져옴
+	var coreAddresses []string
+	coresEnv := os.Getenv("CORES")
+	if coresEnv != "" {
+		coreAddresses = strings.Split(coresEnv, ",")
+	} else {
+		coreAddresses = config.Cores
+	}
+
+	g, ctx := errgroup.WithContext(context.Background())
+	for _, coreAddress := range coreAddresses {
+		parts := strings.Split(coreAddress, ":")
+		if len(parts) != 2 {
+			return structure.ControlContext{}, fmt.Errorf("invalid core address format in '%s': expected ip:port", coreAddress)
+		}
+		ip := parts[0]
+		port, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return structure.ControlContext{}, fmt.Errorf("error converting port number from %s: %w", coreAddress, err)
+		}
+
+		core := findCore(infra.Cores, ip, uint16(port))
+		if core == nil {
+			newCore := structure.Core{
+				IP:      ip,
+				Port:    uint16(port),
+				IsAlive: true,
+			}
+			infra.Cores = append(infra.Cores, newCore)
+			core = &infra.Cores[len(infra.Cores)-1]
+			log.DebugInfo("Added new core: %s:%d", ip, port)
+		} else {
+			core.IsAlive = true
+		}
+
+		currentCore := core
+		g.Go(func() error {
+			client := request.NewCoreClient(currentCore)
+
+			memResp, err := client.GetCoreMachineMemoryInfo(ctx)
+			if err != nil {
+				currentCore.IsAlive = false
+				return fmt.Errorf("failed to get Memory info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
+			}
+			diskResp, err := client.GetCoreMachineDiskInfo(ctx)
+			if err != nil {
+				currentCore.IsAlive = false
+				return fmt.Errorf("failed to get Disk info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
+			}
+
+			totalMemoryMiB := uint32(memResp.Total * 1024)
+			totalDiskMiB := uint32(diskResp.Total * 1024)
+			freeMemoryMiB := uint32(memResp.Available * 1024)
+			freeDiskMiB := uint32(diskResp.Free * 1024)
+
+			var totalCpuCores uint32
+			if currentCore.CoreInfoIdx.Cpu > 0 {
+				totalCpuCores = currentCore.CoreInfoIdx.Cpu
+			} else {
+				log.DebugInfo("currentCore.CoreInfoIdx.Cpu: %d", currentCore.CoreInfoIdx.Cpu)
+				totalCpuCores = 9999 // 음 코어를 현재 반환받지 못하는-
+			}
+
+			currentCore.CoreInfoIdx.Cpu = totalCpuCores
+			currentCore.CoreInfoIdx.Memory = totalMemoryMiB
+			currentCore.CoreInfoIdx.Disk = totalDiskMiB
+
+			currentCore.FreeDisk = freeDiskMiB
+			currentCore.FreeMemory = freeMemoryMiB
+			currentCore.FreeCPU = totalCpuCores
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to get core info: %w", err)
+	}
+
+	vmInfoList, coreIdxList, err := infra.GetAllInstanceInfo()
+	if err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to get all instance info: %w", err)
+	}
+
+	for i, vmInfo := range vmInfoList {
+		coreIdx := coreIdxList[i]
+		if coreIdx < 0 || coreIdx >= len(infra.Cores) {
+			return structure.ControlContext{}, fmt.Errorf("core index %d out of range for core list", coreIdx)
+		}
+		core := &infra.Cores[coreIdx]
+		if core.VMInfoIdx == nil {
+			core.VMInfoIdx = make(map[structure.UUID]*structure.VMInfo)
+		}
+		if _, exists := core.VMInfoIdx[vmInfo.UUID]; !exists {
+			core.VMInfoIdx[vmInfo.UUID] = &vmInfo
+			infra.VMLocation[vmInfo.UUID] = core
+		} else {
+			log.DebugInfo("VM %s already exists in core %d, skipping", vmInfo.UUID, coreIdx)
+		}
+	}
+
 	return infra, nil
 }
 
