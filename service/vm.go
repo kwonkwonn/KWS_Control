@@ -202,11 +202,17 @@ func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 		UUID: uuid,
 		Type: model.HardDelete,
 	})
-	contextStruct.DeleteInstance(uuid)
 	if err != nil {
 		log.Error("error deleting VM %s on core %s: %w", uuid, core.IP, err)
 		return err
 	}
+
+	err = contextStruct.DeleteInstance(uuid)
+	if err != nil {
+		log.Error("error deleting instance %s from ControlContext: %v", uuid, err)
+		return err
+	}
+
 	return nil
 }
 

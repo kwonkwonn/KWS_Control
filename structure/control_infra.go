@@ -146,7 +146,7 @@ func (contextStructure *ControlContext) DeleteInstance(uuid UUID) error {
 	log := util.GetLogger()
 	tx, err := contextStructure.DB.Begin()
 	if err != nil {
-		log.Error("Failed to start taransaction: %v", err)
+		log.Error("Failed to start transaction: %v", err)
 		return err
 	}
 	defer tx.Rollback()
@@ -169,7 +169,7 @@ func (contextStructure *ControlContext) GetInstance(uuid UUID) (*VMInfo, error) 
 	log := util.GetLogger()
 	tx, err := contextStructure.DB.Begin()
 	if err != nil {
-		log.Error("Failed to start taransaction: %v", err)
+		log.Error("Failed to start transaction: %v", err)
 		return nil, err
 	}
 	defer tx.Rollback()
@@ -178,7 +178,7 @@ func (contextStructure *ControlContext) GetInstance(uuid UUID) (*VMInfo, error) 
 	defer cancel()
 
 	var instance VMInfo
-	err = tx.QueryRowContext(ctx, "SELECT uuid, inst_ip, guac_pass, inst_mem, inst_vcpu, inst_disk FROM instance WHERE uuid = ?", uuid).Scan(
+	err = tx.QueryRowContext(ctx, "SELECT uuid, inst_ip, guac_pass, inst_mem, inst_vcpu, inst_disk FROM inst_info WHERE uuid = ?", uuid).Scan(
 		&instance.UUID,
 		&instance.IP_VM,
 		&instance.GuacPassword,
@@ -196,7 +196,7 @@ func (contextStructure *ControlContext) GetInstanceLocation(uuid UUID) (int, err
 	log := util.GetLogger()
 	tx, err := contextStructure.DB.Begin()
 	if err != nil {
-		log.Error("Failed to start taransaction: %v", err)
+		log.Error("Failed to start transaction: %v", err)
 		return 0, err
 	}
 	defer tx.Rollback()
@@ -217,7 +217,7 @@ func (contextStructure *ControlContext) GetAllInstanceInfo() ([]VMInfo, []int, e
 	log := util.GetLogger()
 	tx, err := contextStructure.DB.Begin()
 	if err != nil {
-		log.Error("Failed to start taransaction: %v", err)
+		log.Error("Failed to start transaction: %v", err)
 		return nil, nil, err
 	}
 	defer tx.Rollback()
@@ -229,7 +229,7 @@ func (contextStructure *ControlContext) GetAllInstanceInfo() ([]VMInfo, []int, e
 	rows, err = tx.QueryContext(ctx, "SELECT info.uuid, loc.core, info.inst_ip, info.guac_pass, info.inst_vcpu, info.inst_mem, info.inst_disk FROM inst_loc loc JOIN inst_info info ON loc.uuid = info.uuid")
 	if err != nil {
 		log.Error("Failed to get joined instance info: %v", err)
-		//return nil, nil, err
+		return nil, nil, err
 	}
 
 	var coreIdxList []int
