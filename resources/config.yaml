@@ -2,7 +2,7 @@ vm_internal_subnets:
   - "127.0.0.1/24"
 
 cores:
-  - "192.168.0.10:12345"
+  - "100.95.253.74:8080"
 
 guacamole_base_url: "http://localhost/guacamole"
 port: 8081

@@ -42,6 +42,7 @@ services:
       - GUAC_DB_PASSWORD=${GUAC_DB_PASSWORD}
       - GUAC_DB_HOST=${GUAC_DB_HOST}
       - GUAC_DB_NAME=${GUAC_DB_NAME}
+      - CMS_HOST=${CMS_HOST}
     depends_on:
       - mysql
       - redis

@@ -126,7 +126,12 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return err
 	}
 
-	fmt.Printf("AssignInternalAddress(): %s", instanceIp)
+	cmsClient := NewCmsClient()
+	addrResp := cmsClient.NewCmsSubnet("20.20.22.")
+	fmt.Printf("%s\n", addrResp.IP)
+	fmt.Printf("%s\n", addrResp.MacAddr)
+	fmt.Printf("%s\n", addrResp.SdnUUID)
+
 	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
 
 	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), instanceIp, privateKeyPEM, contextStruct.GuacDB)
