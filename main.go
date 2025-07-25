@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/easy-cloud-Knet/KWS_Control/service"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 
 	"github.com/easy-cloud-Knet/KWS_Control/api"
@@ -32,11 +31,11 @@ func main() {
 		panic(err)
 	}
 	printCores(contextStruct.Cores)
-	cmsClient := service.NewCmsClient()
-	addrResp := cmsClient.NewCmsSubnet("20.20.22.")
-	fmt.Printf("%s\n", addrResp.IP)
-	fmt.Printf("%s\n", addrResp.MacAddr)
-	fmt.Printf("%s\n", addrResp.SdnUUID)
+	// cmsClient := service.NewCmsClient()
+	// addrResp := cmsClient.NewCmsSubnet("20.20.22.")
+	// fmt.Printf("%s\n", addrResp.IP)
+	// fmt.Printf("%s\n", addrResp.MacAddr)
+	// fmt.Printf("%s\n", addrResp.SdnUUID)
 
 	go func() {
 		err := api.Server(contextStruct.Config.Port, &contextStruct, rdb)

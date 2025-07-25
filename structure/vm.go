@@ -49,6 +49,7 @@ type VMInfo struct {
 	IP_VM        string
 	UUID         UUID
 	GuacPassword string
+	MacAddr      string
 	Memory       uint32 // VM의 메모리 MiB
 	Cpu          uint32 // VM의 CPU 논리 코어 수
 	Disk         uint32 // VM의 디스크 MiB

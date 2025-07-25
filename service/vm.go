@@ -122,21 +122,19 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		}
 	}
 
-	instanceIp, err := contextStruct.AssignInternalAddress()
-	if err != nil {
-		log.Error("AssignInternalAddress() failed: %v", err, true)
-		return err
-	}
+	// instanceIp, err := contextStruct.AssignInternalAddress()
+	// if err != nil {
+	// 	log.Error("AssignInternalAddress() failed: %v", err, true)
+	// 	return err
+	// }
 
 	cmsClient := NewCmsClient()
-	addrResp := cmsClient.NewCmsSubnet("20.20.22.")
-	fmt.Printf("%s\n", addrResp.IP)
-	fmt.Printf("%s\n", addrResp.MacAddr)
-	fmt.Printf("%s\n", addrResp.SdnUUID)
+	cmsResp := cmsClient.NewCmsSubnet("20.20.22.")
+	fmt.Printf("%s\n", cmsResp.IP)
+	fmt.Printf("%s\n", cmsResp.MacAddr)
+	fmt.Printf("%s\n", cmsResp.SdnUUID)
 
-	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
-
-	userPass := GuacamoleConfig(req.Users[0].Name, string(uuid), instanceIp, privateKeyPEM, contextStruct.GuacDB)
+	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), cmsResp.IP, privateKeyPEM, contextStruct.GuacDB)
 
 	if userPass == "" {
 		log.Error("Failed to configure Guacamole", true)
@@ -147,10 +145,11 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	newVM := &structure.VMInfo{
 		UUID:         uuid,
 		GuacPassword: userPass,
+		MacAddr:      cmsResp.MacAddr,
 		Memory:       req.HardwareInfo.Memory,
 		Cpu:          req.HardwareInfo.CPU,
 		Disk:         req.HardwareInfo.Disk,
-		IP_VM:        instanceIp,
+		IP_VM:        cmsResp.IP,
 	}
 
 	// selected core 상태 업데이트
@@ -165,7 +164,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	log.DebugInfo("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
 
-	req.NetConf.Ips = []string{instanceIp}
+	req.NetConf.Ips = []string{cmsResp.IP}
+	req.SdnUUID = cmsResp.SdnUUID
+	req.MacAddr = cmsResp.MacAddr
 	req.NetConf.NetType = 0
 	req.Users[0].SSHAuthorizedKeys = []string{publicKeyOpenSSH}
 
