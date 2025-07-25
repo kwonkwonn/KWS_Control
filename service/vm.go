@@ -10,6 +10,7 @@ import (
 
 	"github.com/easy-cloud-Knet/KWS_Control/request"
 	"github.com/easy-cloud-Knet/KWS_Control/request/model"
+	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 
 	vms "github.com/easy-cloud-Knet/KWS_Control/structure"
@@ -104,16 +105,17 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	// 문제가 생겼을 때 지우는 무언가
 	var guacamoleConfigured = false
 	var coreResourcesAllocated = false
+	var uuid = structure.UUID(req.UUID.String().(string))
 
 	cleanup := func() {
 		if guacamoleConfigured {
 			log.Info("clean up clean up")
-			if cleanupErr := CleanupGuacamoleConfig(string(req.UUID), contextStruct.GuacDB); cleanupErr != nil {
+			if cleanupErr := CleanupGuacamoleConfig(string(uuid), contextStruct.GuacDB); cleanupErr != nil {
 				log.Error("Failed to cleanup Guacamole config during rollback: %v", cleanupErr)
 			}
 		}
 		if coreResourcesAllocated {
-			delete(selectedCore.VMInfoIdx, req.UUID)
+			delete(selectedCore.VMInfoIdx, uuid)
 			selectedCore.FreeMemory += req.HardwareInfo.Memory
 			selectedCore.FreeCPU += req.HardwareInfo.CPU
 			selectedCore.FreeDisk += req.HardwareInfo.Disk
@@ -134,7 +136,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
 
-	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), instanceIp, privateKeyPEM, contextStruct.GuacDB)
+	userPass := GuacamoleConfig(req.Users[0].Name, string(uuid), instanceIp, privateKeyPEM, contextStruct.GuacDB)
 
 	if userPass == "" {
 		log.Error("Failed to configure Guacamole", true)
@@ -142,8 +144,8 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	}
 	guacamoleConfigured = true
 
-	newVM := &vms.VMInfo{
-		UUID:         req.UUID,
+	newVM := &structure.VMInfo{
+		UUID:         uuid,
 		GuacPassword: userPass,
 		Memory:       req.HardwareInfo.Memory,
 		Cpu:          req.HardwareInfo.CPU,
@@ -155,7 +157,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	if selectedCore.VMInfoIdx == nil {
 		selectedCore.VMInfoIdx = make(map[vms.UUID]*vms.VMInfo)
 	}
-	selectedCore.VMInfoIdx[req.UUID] = newVM
+	selectedCore.VMInfoIdx[uuid] = newVM
 	selectedCore.FreeMemory -= req.HardwareInfo.Memory
 	selectedCore.FreeCPU -= req.HardwareInfo.CPU
 	selectedCore.FreeDisk -= req.HardwareInfo.Disk
@@ -174,22 +176,29 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		cleanup() // 직접 지우지 말고 요 함수 하나로--
 		return err
 	}
+	err = contextStruct.AddInstance(newVM, selectedCoreIndex)
+	if err != nil {
+		log.Error("Error database instance insertion failed: %v", err, true)
+		cleanup() // 직접 지우지 말고 요 함수 하나로--
+	}
 
 	// ControlContext global 상태 업데이트
 	if contextStruct.VMLocation == nil {
 		contextStruct.VMLocation = make(map[vms.UUID]*vms.Core)
 	}
-	contextStruct.VMLocation[req.UUID] = &contextStruct.Cores[selectedCoreIndex]
+	contextStruct.VMLocation[uuid] = &contextStruct.Cores[selectedCoreIndex]
 	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
-	log.Info("VM %s added to ControlContext", req.UUID, true)
+	log.Info("VM %s added to ControlContext", uuid, true)
 
-	log.Info("UUID %s CreateVM request success on core %s", req.UUID, selectedCore.IP, true)
+	log.Info("UUID %s CreateVM request success on core %s", uuid, selectedCore.IP, true)
 	return nil
 }
 
 func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
+	log := util.GetLogger()
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
+		log.Error("VM with UUID %s not found", string(uuid))
 		return fmt.Errorf("VM with UUID %s not found", string(uuid))
 	}
 
@@ -198,8 +207,18 @@ func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 		UUID: uuid,
 		Type: model.HardDelete,
 	})
+	if err != nil {
+		log.Error("error deleting VM %s on core %s: %w", uuid, core.IP, err)
+		return err
+	}
 
-	return err
+	err = contextStruct.DeleteInstance(uuid)
+	if err != nil {
+		log.Error("error deleting instance %s from ControlContext: %v", uuid, err)
+		return err
+	}
+
+	return nil
 }
 
 func ShutdownVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
