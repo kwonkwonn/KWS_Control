@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/util"
@@ -71,4 +72,45 @@ func (c *CmsClient) NewCmsSubnet(Subnet string) *CmsResponse {
 	}
 
 	return &addrResp
+}
+
+type subnet_parse struct {
+	val1 string
+	val2 string
+	val3 string
+}
+
+func Find_subnet(last_subnet string) string {
+
+	value := make([]int, 3)
+
+	for i := 0; i < 3; i++ {
+		var j int
+		var temp string
+		for last_subnet[j] != '.' {
+			temp = temp + string(last_subnet[j])
+			j++
+		}
+		value[i], _ = strconv.Atoi(temp)
+	}
+
+	if value[2] >= 255 {
+		if value[1] >= 255 {
+			if value[0] >= 255 {
+				return ""
+			} else {
+				value[0]++
+				value[1] = 0
+				value[2] = 0
+			}
+		} else {
+			value[1]++
+			value[2] = 0
+		}
+	} else {
+		value[2]++
+	}
+
+	result := fmt.Sprintf("%s.%s.%s", strconv.Itoa(value[0]), strconv.Itoa(value[1]), strconv.Itoa(value[2]))
+	return result
 }

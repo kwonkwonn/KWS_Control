@@ -138,6 +138,13 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 	infra.GuacDB = db
 	infra.DB = mainDB
 
+	var last_subnet_db string
+	err = infra.DB.QueryRow("SELECT last_subnet from core_base.subnet where id = '1'").Scan(&last_subnet_db)
+	if err != nil {
+		return structure.ControlContext{}, fmt.Errorf("failed to get last_subnet: %w", err)
+	}
+	infra.Last_subnet = last_subnet_db
+
 	// 모든 Core 정의
 	infra.VMLocation = make(map[structure.UUID]*structure.Core)
 	for i := range infra.Cores {
