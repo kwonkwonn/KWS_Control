@@ -74,30 +74,23 @@ func (c *CmsClient) NewCmsSubnet(Subnet string) *CmsResponse {
 	return &addrResp
 }
 
-type subnet_parse struct {
-	val1 string
-	val2 string
-	val3 string
-}
-
 func Find_subnet(last_subnet string) string {
-
 	value := make([]int, 3)
-
+	j := 0
 	for i := 0; i < 3; i++ {
-		var j int
 		var temp string
 		for last_subnet[j] != '.' {
 			temp = temp + string(last_subnet[j])
 			j++
 		}
 		value[i], _ = strconv.Atoi(temp)
+		j++
 	}
 
 	if value[2] >= 255 {
 		if value[1] >= 255 {
 			if value[0] >= 255 {
-				return ""
+				return "err"
 			} else {
 				value[0]++
 				value[1] = 0
@@ -111,6 +104,6 @@ func Find_subnet(last_subnet string) string {
 		value[2]++
 	}
 
-	result := fmt.Sprintf("%s.%s.%s", strconv.Itoa(value[0]), strconv.Itoa(value[1]), strconv.Itoa(value[2]))
+	result := fmt.Sprintf("%s.%s.%s.", strconv.Itoa(value[0]), strconv.Itoa(value[1]), strconv.Itoa(value[2]))
 	return result
 }
