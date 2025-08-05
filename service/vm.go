@@ -102,9 +102,13 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return err
 	}
 
+	// add : back -> vm uuid    ->  cms   다른 api
+	// new : subnet 찾기 -> cms
+
 	// 문제가 생겼을 때 지우는 무언가
 	var guacamoleConfigured = false
 	var coreResourcesAllocated = false
+	var newSubnetAllocated = false
 	var uuid = structure.UUID(req.UUID.String().(string))
 
 	cleanup := func() {
@@ -120,6 +124,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 			selectedCore.FreeCPU += req.HardwareInfo.CPU
 			selectedCore.FreeDisk += req.HardwareInfo.Disk
 		}
+		if newSubnetAllocated {
+			//subnet--
+		}
 	}
 
 	// instanceIp, err := contextStruct.AssignInternalAddress()
@@ -127,9 +134,20 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	// 	log.Error("AssignInternalAddress() failed: %v", err, true)
 	// 	return err
 	// }
-
+	var cmsResp *CmsResponse
 	cmsClient := NewCmsClient()
-	cmsResp := cmsClient.NewCmsSubnet("20.20.22.")
+
+	if req.Subnettype == "Add" {
+		cmsResp, err = cmsClient.AddCmsSubnet(contextStruct, uuid)
+	} else {
+		cmsResp, err = cmsClient.NewCmsSubnet(contextStruct)
+		newSubnetAllocated = true
+	}
+	if err != nil {
+		log.Error("Failed to configure cms", true)
+		return errors.New("failed to configure cms")
+	}
+
 	fmt.Printf("%s\n", cmsResp.IP)
 	fmt.Printf("%s\n", cmsResp.MacAddr)
 	fmt.Printf("%s\n", cmsResp.SdnUUID)
@@ -181,6 +199,13 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	if err != nil {
 		log.Error("Error database instance insertion failed: %v", err, true)
 		cleanup() // 직접 지우지 말고 요 함수 하나로--
+	}
+
+	if newSubnetAllocated {
+		_, err := contextStruct.DB.Exec("UPDATE subnet SET last_subnet = ? WHERE id = '1'", cmsResp.IP)
+		if err != nil {
+			log.Error("Error database Subnet insertion failed: %v", err, true)
+		}
 	}
 
 	// ControlContext global 상태 업데이트

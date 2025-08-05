@@ -16,7 +16,7 @@ func main() {
 
 	ctx := context.Background()
 
-	// Redis 초기화
+	//Redis 초기화
 	rdb, err := startup.InitializeRedis(ctx)
 	if err != nil {
 		log.Error("Failed to initialize Redis: %v", err, true)

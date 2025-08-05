@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	vms "github.com/easy-cloud-Knet/KWS_Control/structure"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
@@ -38,40 +40,81 @@ func NewCmsClient() *CmsClient {
 	}
 }
 
-func (c *CmsClient) NewCmsSubnet(Subnet string) *CmsResponse {
+func (c *CmsClient) CmsRequest(Subnet string) (*CmsResponse, error) {
 	log := util.GetLogger()
+
 	c.baseURL = fmt.Sprintf("http://%s/New/Instance", c.baseURL)
 	reqBody := CmsRequest{Subnet: Subnet}
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		log.Error("CMS : failed to marshal JSON: %w", err)
-		return nil
+		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", c.baseURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		log.Error("CMS : failed to NewRequest: %w", err)
-		return nil
+		return nil, err
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
 		log.Error("CMS : failed to create request: %w", err)
-		return nil
+		return nil, err
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Error("CMS : CMS returned status: %s", resp.Status)
-		return nil
+		return nil, err
 	}
 	var addrResp CmsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&addrResp); err != nil {
 		log.Error("CMS : failed to decode CMS response: %w", err)
-		return nil
+		return nil, err
 	}
 
-	return &addrResp
+	return &addrResp, nil
+}
+
+func (c *CmsClient) AddCmsSubnet(ctx *vms.ControlContext, uuid vms.UUID) (*CmsResponse, error) {
+	log := util.GetLogger()
+
+	ip, err := GetVMIPByUUID(ctx, uuid)
+	if err != nil {
+		log.Error("AddCmsSubnet : GetVMIPByUUID: %w", err)
+		return nil, err
+	}
+	subnet, err := GetSubnetFromIP(ip)
+	if err != nil {
+		log.Error("AddCmsSubnet : GetSubnetFromIP: %v", err)
+		return nil, err
+	}
+	temp, err := c.CmsRequest(subnet)
+	if err != nil {
+		log.Error("AddCmsSubnet : c.CmsRequest(subnet): %v", err)
+		return nil, err
+	}
+
+	return temp, nil
+
+}
+
+func (c *CmsClient) NewCmsSubnet(ctx *vms.ControlContext) (*CmsResponse, error) {
+	log := util.GetLogger()
+
+	last_subnet := ctx.Last_subnet
+
+	next_last_subnet := Find_subnet(last_subnet)
+
+	temp, err := c.CmsRequest(next_last_subnet)
+	if err != nil {
+		log.Error("AddCmsSubnet : c.CmsRequest(subnet): %v", err)
+		return nil, err
+	}
+
+	return temp, nil
+
 }
 
 func Find_subnet(last_subnet string) string {
@@ -106,4 +149,27 @@ func Find_subnet(last_subnet string) string {
 
 	result := fmt.Sprintf("%s.%s.%s.", strconv.Itoa(value[0]), strconv.Itoa(value[1]), strconv.Itoa(value[2]))
 	return result
+}
+
+func GetVMIPByUUID(ctx *vms.ControlContext, uuid vms.UUID) (string, error) {
+	core, ok := ctx.VMLocation[uuid]
+	if !ok {
+		return "", fmt.Errorf("UUID %s not found in VMLocation", uuid)
+	}
+
+	vmInfo, ok := core.VMInfoIdx[uuid]
+	if !ok {
+		return "", fmt.Errorf("VMInfo for UUID %s not found in Core", uuid)
+	}
+
+	return vmInfo.IP_VM, nil
+}
+
+func GetSubnetFromIP(ip string) (string, error) {
+	parts := strings.Split(ip, ".")
+	if len(parts) != 4 {
+		return "", fmt.Errorf("invalid IP format: %s", ip)
+	}
+
+	return strings.Join(parts[:3], ".") + ".", nil
 }
