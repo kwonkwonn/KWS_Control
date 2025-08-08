@@ -2,7 +2,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
-    command: redis-server /usr/local/etc/redis/redis.conf
+    command: ["redis-server"] 
     hostname: redis
     ports:
       - "6379:6379"
@@ -53,3 +53,7 @@ services:
 
 volumes:
   mysql_data:
+
+
+
+# /usr/local/etc/redis/redis.conf
