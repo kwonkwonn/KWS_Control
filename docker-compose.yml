@@ -2,6 +2,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    command: ["redis-server"] 
+    hostname: redis
     ports:
       - "6379:6379"
     restart: unless-stopped
@@ -42,6 +44,8 @@ services:
       - GUAC_DB_PASSWORD=${GUAC_DB_PASSWORD}
       - GUAC_DB_HOST=${GUAC_DB_HOST}
       - GUAC_DB_NAME=${GUAC_DB_NAME}
+      - REDIS_HOST=${REDIS_HOST}
+      - CMS_HOST=${CMS_HOST}
     depends_on:
       - mysql
       - redis
@@ -49,3 +53,7 @@ services:
 
 volumes:
   mysql_data:
+
+
+
+# /usr/local/etc/redis/redis.conf

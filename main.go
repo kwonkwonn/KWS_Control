@@ -16,7 +16,7 @@ func main() {
 
 	ctx := context.Background()
 
-	// Redis 초기화
+	//Redis 초기화
 	rdb, err := startup.InitializeRedis(ctx)
 	if err != nil {
 		log.Error("Failed to initialize Redis: %v", err, true)
@@ -30,8 +30,12 @@ func main() {
 		log.Error("Failed to initialize: %v", err, true)
 		panic(err)
 	}
-
 	printCores(contextStruct.Cores)
+	// cmsClient := service.NewCmsClient()
+	// addrResp := cmsClient.NewCmsSubnet("20.20.22.")
+	// fmt.Printf("%s\n", addrResp.IP)
+	// fmt.Printf("%s\n", addrResp.MacAddr)
+	// fmt.Printf("%s\n", addrResp.SdnUUID)
 
 	go func() {
 		err := api.Server(contextStruct.Config.Port, &contextStruct, rdb)

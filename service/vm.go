@@ -102,9 +102,13 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return err
 	}
 
+	// add : back -> vm uuid    ->  cms   다른 api
+	// new : subnet 찾기 -> cms
+
 	// 문제가 생겼을 때 지우는 무언가
 	var guacamoleConfigured = false
 	var coreResourcesAllocated = false
+	var newSubnetAllocated = false
 	var uuid = structure.UUID(req.UUID.String().(string))
 
 	cleanup := func() {
@@ -120,18 +124,35 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 			selectedCore.FreeCPU += req.HardwareInfo.CPU
 			selectedCore.FreeDisk += req.HardwareInfo.Disk
 		}
+		if newSubnetAllocated {
+			//subnet--
+		}
 	}
 
-	instanceIp, err := contextStruct.AssignInternalAddress()
+	// instanceIp, err := contextStruct.AssignInternalAddress()
+	// if err != nil {
+	// 	log.Error("AssignInternalAddress() failed: %v", err, true)
+	// 	return err
+	// }
+	var cmsResp *CmsResponse
+	cmsClient := NewCmsClient()
+
+	if req.Subnettype == "Add" {
+		cmsResp, err = cmsClient.AddCmsSubnet(contextStruct, uuid)
+	} else {
+		cmsResp, err = cmsClient.NewCmsSubnet(contextStruct)
+		newSubnetAllocated = true
+	}
 	if err != nil {
-		log.Error("AssignInternalAddress() failed: %v", err, true)
-		return err
+		log.Error("Failed to configure cms", true)
+		return errors.New("failed to configure cms")
 	}
 
-	fmt.Printf("AssignInternalAddress(): %s", instanceIp)
-	fmt.Println(publicKeyOpenSSH) // TODO: 코어로 보내줘야함
+	fmt.Printf("%s\n", cmsResp.IP)
+	fmt.Printf("%s\n", cmsResp.MacAddr)
+	fmt.Printf("%s\n", cmsResp.SdnUUID)
 
-	userPass := GuacamoleConfig(req.Users[0].Name, string(uuid), instanceIp, privateKeyPEM, contextStruct.GuacDB)
+	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), cmsResp.IP, privateKeyPEM, contextStruct.GuacDB)
 
 	if userPass == "" {
 		log.Error("Failed to configure Guacamole", true)
@@ -142,10 +163,11 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	newVM := &structure.VMInfo{
 		UUID:         uuid,
 		GuacPassword: userPass,
+		MacAddr:      cmsResp.MacAddr,
 		Memory:       req.HardwareInfo.Memory,
 		Cpu:          req.HardwareInfo.CPU,
 		Disk:         req.HardwareInfo.Disk,
-		IP_VM:        instanceIp,
+		IP_VM:        cmsResp.IP,
 	}
 
 	// selected core 상태 업데이트
@@ -160,7 +182,9 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 
 	log.DebugInfo("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
 
-	req.NetConf.Ips = []string{instanceIp}
+	req.NetConf.Ips = []string{cmsResp.IP}
+	req.SdnUUID = cmsResp.SdnUUID
+	req.MacAddr = cmsResp.MacAddr
 	req.NetConf.NetType = 0
 	req.Users[0].SSHAuthorizedKeys = []string{publicKeyOpenSSH}
 
@@ -175,6 +199,13 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	if err != nil {
 		log.Error("Error database instance insertion failed: %v", err, true)
 		cleanup() // 직접 지우지 말고 요 함수 하나로--
+	}
+
+	if newSubnetAllocated {
+		_, err := contextStruct.DB.Exec("UPDATE subnet SET last_subnet = ? WHERE id = '1'", cmsResp.IP)
+		if err != nil {
+			log.Error("Error database Subnet insertion failed: %v", err, true)
+		}
 	}
 
 	// ControlContext global 상태 업데이트

@@ -26,6 +26,9 @@ type CreateVMRequest struct {
 	HardwareInfo HardwareInfo   `json:"HWInfo"`
 	NetConf      NetDefine      `json:"network"`
 	Users        []UserInfoVM   `json:"users"`
+	SdnUUID      string         `json:"sdnUUID"`
+	MacAddr      string         `json:"macAddr"`
+	Subnettype   string         `json:"Subnettype"`
 }
 
 type DomainDeleteType uint
