@@ -1,7 +1,13 @@
 name: Development Container - Build and Deploy Docker Image
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      description:
+        description: 'Dev Manual deployment'
+        required: false
+        default: 'Dev Manual deployment'
+        type: string
   push:
     branches:
       - Dev
