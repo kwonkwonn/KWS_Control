@@ -148,12 +148,18 @@ func (c *handlerContext) redis(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	key := string(req.UUID)
-	value := req.Status
+
+	originalStatus := req.Status
+	normalizedStatus := model.ValidateAndNormalizeStatus(req.Status)
+
+	if originalStatus != normalizedStatus {
+		log.Warn("VM status normalized: UUID=%s, original='%s', normalized='%s'",
+			key, originalStatus, normalizedStatus, true)
+	}
 
 	ctx := r.Context()
 
-	// Redis에 저장
-	if err := c.rdb.Set(ctx, key, value, 0).Err(); err != nil {
+	if err := c.rdb.Set(ctx, key, normalizedStatus, 0).Err(); err != nil {
 		http.Error(w, "Failed to update Redis", http.StatusInternalServerError)
 		log.Error("Redis SET failed: %v", err, true)
 		return

@@ -119,6 +119,16 @@ type Redis struct {
 	Status string         `json:"status"`
 }
 
+// api/model/vm.go와 동일하게--
+// 너무 나눠진 거 같은데 어케 해결할지는 나중에 고민해보죠
+const (
+	VMStatusBooting    = "booting"
+	VMStatusRunning    = "running"
+	VMStatusStopped    = "stopped"
+	VMStatusTerminated = "terminated"
+	VMStatusUnknown    = "unknown"
+)
+
 // type instaceStatus int
 
 // const (
