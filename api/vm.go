@@ -6,6 +6,7 @@ import (
 
 	"github.com/easy-cloud-Knet/KWS_Control/api/model"
 	"github.com/easy-cloud-Knet/KWS_Control/service"
+	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
@@ -109,19 +110,18 @@ func (c *handlerContext) vmStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *handlerContext) vmConnect(w http.ResponseWriter, r *http.Request) {
-	//goland:noinspection GoUnhandledErrorResult
-	defer r.Body.Close()
-
 	log := util.GetLogger()
 
-	var req model.ApiVmConnectRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		log.Error("Failed to decode request body: %v", err, true)
+	uuidStr := r.URL.Query().Get("uuid")
+	if uuidStr == "" {
+		http.Error(w, "Missing 'uuid' query parameter", http.StatusBadRequest)
+		log.Error("Missing 'uuid' query parameter", nil, true)
 		return
 	}
 
-	authToken, err := service.GetGuacamoleToken(req.UUID, c.context)
+	var uuid = structure.UUID(uuidStr)
+
+	authToken, err := service.GetGuacamoleToken(uuid, c.context)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Error("Failed to get Guacamole token: %v", err, true)
@@ -134,7 +134,6 @@ func (c *handlerContext) vmConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
-
 }
 func (c *handlerContext) redis(w http.ResponseWriter, r *http.Request) {
 	log := util.GetLogger()
