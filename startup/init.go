@@ -135,6 +135,7 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 	}
 
 	guacBaseURL := os.Getenv("GUACAMOLE_BASE_URL")
+	log.Println("GUACAMOLE_BASE_URL:", guacBaseURL)
 	if guacBaseURL != "" {
 		config.GuacBaseURL = guacBaseURL
 	}

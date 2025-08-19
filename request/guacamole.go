@@ -26,6 +26,8 @@ func (c *GuacamoleClient) AuthToken() string {
 }
 
 func NewGuacamoleClient(config *structure.Config) *GuacamoleClient {
+	log := util.GetLogger()
+	log.Println("NewGuacamoleClient (-> Guacamole) baseURL:", config.GuacBaseURL)
 	return &GuacamoleClient{
 		baseURL: config.GuacBaseURL,
 		client: &http.Client{
