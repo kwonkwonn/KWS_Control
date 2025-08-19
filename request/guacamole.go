@@ -51,6 +51,8 @@ func (c *GuacamoleClient) Authenticate(ctx context.Context, username, password s
 	data.Set("password", password)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/tokens", strings.NewReader(data.Encode()))
+	log.Println("(-> Guacamole) request body:", data.Encode())
+	log.Println("(-> Guacamole) request URL:", c.baseURL+"/api/tokens")
 	if err != nil {
 		return fmt.Errorf("failed to create auth request: %w", err)
 	}
