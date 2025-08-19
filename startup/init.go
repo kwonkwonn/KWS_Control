@@ -134,6 +134,11 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 		return structure.ControlContext{}, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	guacBaseURL := os.Getenv("GUACAMOLE_BASE_URL")
+	if guacBaseURL != "" {
+		config.GuacBaseURL = guacBaseURL
+	}
+
 	infra.Config = config
 	infra.GuacDB = db
 	infra.DB = mainDB

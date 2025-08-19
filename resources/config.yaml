@@ -4,7 +4,8 @@ vm_internal_subnets:
 cores:
   - "100.95.253.74:8080"
 
-guacamole_base_url: "http://localhost/guacamole"
+# guacamole_base_url: "http://localhost:8080/guacamole"
+
 port: 8081
 
 db:
