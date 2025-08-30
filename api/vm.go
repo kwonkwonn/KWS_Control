@@ -176,3 +176,39 @@ func (c *handlerContext) redis(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("VM status updated in Redis"))
 }
+
+func (c *handlerContext) vmInfo(w http.ResponseWriter, r *http.Request) {
+	log := util.GetLogger()
+
+	var req model.ApiVmInfoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		log.Error("Invalid request body: %v", err, true)
+		return
+	}
+	defer r.Body.Close()
+
+	vmInfo, err := service.GetVMInfoFromRedis(r.Context(), c.rdb, req.UUID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		log.Error("failed to get vm info from redis: %v", err, true)
+		return
+	}
+
+	response := model.ApiVmInfoResponse{
+		UUID:   vmInfo.UUID,
+		CPU:    vmInfo.CPU,
+		Memory: vmInfo.Memory,
+		Disk:   vmInfo.Disk,
+		IP:     vmInfo.IP,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Error("failed to encode vm info response: %v", err, true)
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	log.Info("retrieved vm info from redis: UUID=%s", string(req.UUID), true)
+}

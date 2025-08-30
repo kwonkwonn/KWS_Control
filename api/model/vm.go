@@ -19,6 +19,18 @@ type ApiVmConnectRequest struct {
 	UUID structure.UUID `json:"uuid"`
 }
 
+type ApiVmInfoRequest struct {
+	UUID structure.UUID `json:"uuid"`
+}
+
+type ApiVmInfoResponse struct {
+	UUID   structure.UUID `json:"uuid"`
+	CPU    uint32         `json:"cpu"`
+	Memory uint32         `json:"memory"` // MiB
+	Disk   uint32         `json:"disk"`   // MiB
+	IP     string         `json:"ip"`
+}
+
 // request/model/vm.go 와 동일하게 유지
 const (
 	VMStatusPrepareBegin = "prepare begin"
