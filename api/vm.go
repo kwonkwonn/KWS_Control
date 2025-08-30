@@ -13,7 +13,7 @@ import (
 func (c *handlerContext) createVm(w http.ResponseWriter, r *http.Request) {
 	log := util.GetLogger()
 
-	err := service.CreateVM(w, r, c.context)
+	err := service.CreateVM(w, r, c.context, c.rdb)
 	if err != nil {
 		h := w.Header()
 		h.Del("Content-Length")
@@ -39,7 +39,7 @@ func (c *handlerContext) deleteVm(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	err := service.DeleteVM(req.UUID, c.context)
+	err := service.DeleteVM(req.UUID, c.context, c.rdb)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError) // TODO: 코어가 없는 경우 처리
 		return

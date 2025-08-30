@@ -12,13 +12,14 @@ import (
 	"github.com/easy-cloud-Knet/KWS_Control/request"
 	"github.com/easy-cloud-Knet/KWS_Control/request/model"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
+	"github.com/redis/go-redis/v9"
 
 	vms "github.com/easy-cloud-Knet/KWS_Control/structure"
 )
 
 // 새 VM 만드는 무언가.
 // 자원 많이 남은 코어를 찾고, 리소스 할당 업데이트, ControlContext 상태 업데이트.
-func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlContext) error {
+func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlContext, rdb *redis.Client) error {
 	log := util.GetLogger()
 
 	var req model.CreateVMRequest
@@ -207,6 +208,20 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		cleanup() // 직접 지우지 말고 요 함수 하나로--
 		return err
 	}
+
+	vmRedisInfo := model.VMRedisInfo{
+		UUID:   uuid,
+		CPU:    req.HardwareInfo.CPU,
+		Memory: req.HardwareInfo.Memory,
+		Disk:   req.HardwareInfo.Disk,
+		IP:     cmsResp.IP,
+	}
+	
+	if err := StoreVMInfoToRedis(context.Background(), rdb, vmRedisInfo); err != nil {
+		log.Warn("failed to store VM info to redis (vm creation succeeded but..): %v", err, true)
+		// redis에 저장 실패를 vm생성 실패로 처리하지는 않음
+		// 저장 재시도를 하거나 하는 방식이 필요할 거 같기도
+	}
 	err = contextStruct.AddInstance(newVM, selectedCoreIndex)
 	if err != nil {
 		log.Error("Error database instance insertion failed: %v", err, true)
@@ -232,7 +247,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	return nil
 }
 
-func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
+func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Client) error {
 	log := util.GetLogger()
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
@@ -254,6 +269,12 @@ func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 	if err != nil {
 		log.Error("error deleting instance %s from ControlContext: %v", uuid, err)
 		return err
+	}
+
+	if err := RemoveVMInfoFromRedis(context.Background(), rdb, uuid); err != nil {
+		log.Warn("failed to remove vm info from redis (vm deletion succeeded but..): %v", err, true)
+		// 얘도 create할 때처럼 redis 값 삭제 실패를 했을 때 del vm 자체를 실패했다고 처리하지는 않음
+		// 물론 어케 처리할지 고민을..
 	}
 
 	return nil

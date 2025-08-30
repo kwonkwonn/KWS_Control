@@ -119,6 +119,15 @@ type Redis struct {
 	Status string         `json:"status"`
 }
 
+// VMRedisInfo Redis에 저장되는 vm info
+type VMRedisInfo struct {
+	UUID   structure.UUID `json:"uuid"`
+	CPU    uint32         `json:"cpu"`
+	Memory uint32         `json:"memory"` // MiB
+	Disk   uint32         `json:"disk"`   // MiB
+	IP     string         `json:"ip"`
+}
+
 // api/model/vm.go와 동일하게--
 // 너무 나눠진 거 같은데 어케 해결할지는 나중에 고민해보죠
 const (
