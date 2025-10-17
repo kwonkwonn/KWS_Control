@@ -210,6 +210,25 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	req.NetConf.NetType = 0
 	req.Users[0].SSHAuthorizedKeys = []string{publicKeyOpenSSH}
 
+
+	vmRedisInfo := model.VMRedisInfo{
+		UUID:   uuid,
+		CPU:    req.HardwareInfo.CPU,
+		Memory: req.HardwareInfo.Memory,
+		Disk:   req.HardwareInfo.Disk,
+		IP:     cmsResp.IP,
+		Status: model.VMStatusUnknown, // prepare begin 으로 초기화 함
+		Time:   time.Now().Unix(),
+	}
+
+	
+	// HTTP 전송 전에 저장을 완료하여 Core에서 업데이트할 수 있도록 순서 보장
+	if err := StoreVMInfoToRedis(context.Background(), rdb, vmRedisInfo); err != nil {
+		log.Warn("failed to store VM info to redis: %v", err, true)
+		// redis 저장 실패를 vm생성 실패로 처리하지는 않음
+	}
+
+	// Redis 저장 완료 후 HTTP 전송 (Core에서 Redis 업데이트 가능)
 	client := request.NewCoreClient(selectedCore)
 	_, err = client.CreateVM(context.Background(), req)
 	if err != nil {
@@ -218,21 +237,7 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		return err
 	}
 
-	vmRedisInfo := model.VMRedisInfo{
-		UUID:   uuid,
-		CPU:    req.HardwareInfo.CPU,
-		Memory: req.HardwareInfo.Memory,
-		Disk:   req.HardwareInfo.Disk,
-		IP:     cmsResp.IP,
-		Status: model.VMStatusPrepareBegin,
-		Time:   time.Now().Unix(),
-	}
 
-	if err := StoreVMInfoToRedis(context.Background(), rdb, vmRedisInfo); err != nil {
-		log.Warn("failed to store VM info to redis (vm creation succeeded but..): %v", err, true)
-		// redis에 저장 실패를 vm생성 실패로 처리하지는 않음
-		// 저장 재시도를 하거나 하는 방식이 필요할 거 같기도
-	}
 	err = contextStruct.AddInstance(newVM, selectedCoreIndex)
 	if err != nil {
 		log.Error("Error database instance insertion failed: %v", err, true)
