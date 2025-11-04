@@ -118,7 +118,7 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 	parameters := map[string]string{
 		"hostname":    Ip,
 		"port":        "22",
-		"username":    "root",
+		"username":    Username,
 		"private-key": PrivateKey,
 	}
 
