@@ -45,6 +45,7 @@ func main() {
 		}
 	}()
 	select {}
+	//fuck
 }
 
 func printCores(cores []structure.Core) {
