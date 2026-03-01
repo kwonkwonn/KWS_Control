@@ -1,7 +1,6 @@
 package request
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -80,59 +79,6 @@ func (c *GuacamoleClient) Authenticate(ctx context.Context, username, password s
 
 	c.authToken = authResponse.AuthToken
 	log.Info("Successfully authenticated with Guacamole", true)
-
-	return nil
-}
-
-func (c *GuacamoleClient) doRequest(ctx context.Context, method, path string, requestBody, responseBody interface{}) error {
-	log := util.GetLogger()
-
-	var reqBodyReader io.Reader
-	if requestBody != nil {
-		jsonData, err := json.Marshal(requestBody)
-		if err != nil {
-			return fmt.Errorf("failed to marshal request body: %w", err)
-		}
-
-		log.Println("(-> Guacamole) request body:", string(jsonData))
-		reqBodyReader = bytes.NewBuffer(jsonData)
-	}
-
-	requestURL := c.baseURL + path
-	if c.authToken != "" {
-		if strings.Contains(path, "?") {
-			requestURL += "&token=" + c.authToken
-		} else {
-			requestURL += "?token=" + c.authToken
-		}
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, requestURL, reqBodyReader)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	if requestBody != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	//goland:noinspection GoUnhandledErrorResult
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	if responseBody != nil {
-		if err := json.NewDecoder(resp.Body).Decode(responseBody); err != nil {
-			return fmt.Errorf("failed to decode response body: %w", err)
-		}
-	}
 
 	return nil
 }

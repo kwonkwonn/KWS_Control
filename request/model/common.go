@@ -13,6 +13,9 @@ type ErrorDescriptor struct {
 
 type VirError string
 
+// 현재 미사용중
+// 코어랑 에러 타입 맞출려고 짯던 코드같은데
+// 이것도 다시 확인 필요
 const (
 	FaildDeEncoding   VirError = "Error Not Found"
 	DomainSearchError VirError = "Error Searching Domain"

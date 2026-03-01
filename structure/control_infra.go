@@ -3,9 +3,6 @@ package structure
 import (
 	"context"
 	"database/sql"
-	"fmt"
-	"net"
-	"strings"
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/util"
@@ -33,54 +30,6 @@ func (c *ControlContext) FindCoreByVmUUID(uuid UUID) *Core {
 		return nil
 	}
 	return &c.Cores[coreIdx]
-}
-
-func (c *ControlContext) AssignInternalAddress() (string, error) {
-	var usedIPs = make(map[string]bool)
-
-	// 1. 이미 사용된 IP들을 수집
-	for _, core := range c.Cores {
-		for _, vm := range core.VMInfoIdx {
-			usedIPs[vm.IP_VM] = true
-		}
-	}
-
-	// 2. 서브넷을 순회하며 IP를 생성
-	for _, cidr := range c.Config.VmInternalSubnets {
-		_, ipnet, err := net.ParseCIDR(cidr)
-		if err != nil {
-			continue
-		}
-
-		for ip := ipnet.IP.Mask(ipnet.Mask); ipnet.Contains(ip); incrementIP(ip) {
-			ipStr := ip.String()
-
-			if ipStr == ipnet.IP.String() {
-				continue
-			}
-
-			if strings.HasPrefix(ipStr, "10.5.15.") {
-				lastOctet := ip[3]
-				if lastOctet <= 10 {
-					continue
-				}
-			}
-			if !usedIPs[ipStr] && ipStr != ipnet.IP.String() {
-				return ipStr, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("no ip available for allocation")
-}
-
-func incrementIP(ip net.IP) {
-	for i := len(ip) - 1; i >= 0; i-- {
-		ip[i]++
-		if ip[i] != 0 {
-			break
-		}
-	}
 }
 
 func (contextStructure *ControlContext) AddInstance(instanceInfo *VMInfo, coreIdx int) error {
@@ -117,6 +66,8 @@ func (contextStructure *ControlContext) AddInstance(instanceInfo *VMInfo, coreId
 	return tx.Commit()
 }
 
+// 현재 미사용중
+// 이건 미사용중이면 안되지않나? 인스턴스정보 DB에 업데이트 하는거같은데
 func (contextStructure *ControlContext) UpdateInstance(instanceInfo *VMInfo) error {
 	log := util.GetLogger()
 	tx, err := contextStructure.DB.Begin()

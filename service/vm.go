@@ -151,11 +151,6 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 		}
 	}
 
-	// instanceIp, err := contextStruct.AssignInternalAddress()
-	// if err != nil {
-	// 	log.Error("AssignInternalAddress() failed: %v", err, true)
-	// 	return err
-	// }
 	var cmsResp *CmsResponse
 	cmsClient := NewCmsClient()
 
