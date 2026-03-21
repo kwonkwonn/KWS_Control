@@ -1,19 +1,15 @@
-package service
+package guacamole
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"strings"
 
+	"github.com/easy-cloud-Knet/KWS_Control/pkg/crypto"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
-	_ "github.com/go-sql-driver/mysql"
 )
 
-func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string, db *sql.DB) string {
+func Configure(username, uuid, ip, privateKey string, db *sql.DB) string {
 	log := util.GetLogger()
 
 	if db == nil {
@@ -22,24 +18,23 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 	}
 
 	// 1. 무작위 비밀번호 생성
-	userPass, err := generateRandomPassword(12)
+	userPass, err := crypto.GenerateRandomPassword(12)
 	if err != nil {
 		log.Error("guacamole: failed to generate random password:", err, true)
 		return ""
 	}
-	fmt.Println("생성된 비밀번호:", userPass)
 
 	// 2. 32바이트 Salt 생성
-	salt, err := generateRandomSalt(32)
+	salt, err := crypto.GenerateRandomSalt(32)
 	if err != nil {
 		log.Error("guacamole: failed to create random salt:", err, true)
 		return ""
 	}
-	fmt.Println("생성된 salt:", hex.EncodeToString(salt))
 
 	// 3. 해시 계산: SHA256(salt + password)
-	passwordHash := fmt.Sprintf("%x", hashPasswordWithSalt(userPass, salt))
-	saltHex := fmt.Sprintf("%x", salt)
+	passwordHash := fmt.Sprintf("%x", crypto.HashPasswordWithSalt(userPass, salt))
+	saltHex := hex.EncodeToString(salt)
+
 	tx, err := db.Begin()
 	if err != nil {
 		log.Error("guacamole: failed to start transaction: %v", err, true)
@@ -59,15 +54,13 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 	// 중복 확인 이후
 	var entityID int64
 	var res sql.Result
-	err = tx.QueryRow(`SELECT entity_id FROM guacamole_entity WHERE name = ? AND type = 'USER'`, UUID).Scan(&entityID)
+	err = tx.QueryRow(`SELECT entity_id FROM guacamole_entity WHERE name = ? AND type = 'USER'`, uuid).Scan(&entityID)
 	if err == sql.ErrNoRows {
-		// Entity가 없으면 새로 생성
-		res, err = tx.Exec(`INSERT INTO guacamole_entity (name, type) VALUES (?, 'USER')`, UUID)
+		res, err = tx.Exec(`INSERT INTO guacamole_entity (name, type) VALUES (?, 'USER')`, uuid)
 		if err != nil {
 			log.Error("guacamole: failed to create an entity:", err, true)
 			return ""
 		}
-
 		entityID, err = res.LastInsertId()
 		if err != nil {
 			log.Error("guacamole: failed to retrieve entity id:", err, true)
@@ -78,7 +71,6 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 		log.Error("guacamole: failed to check existing entity:", err, true)
 		return ""
 	} else {
-		// Entity가 이미 존재
 		log.DebugInfo("guacamole: using existing entity with ID: %d", entityID)
 	}
 
@@ -97,7 +89,7 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 	}
 
 	// 6. Connection 생성
-	connectionName := fmt.Sprintf("%s-ssh", UUID)
+	connectionName := fmt.Sprintf("%s-ssh", uuid)
 	res, err = tx.Exec(`
 		INSERT INTO guacamole_connection (connection_name, protocol)
 		VALUES (?, 'ssh')
@@ -116,10 +108,10 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 
 	// 7. Connection parameters 설정
 	parameters := map[string]string{
-		"hostname":    Ip,
+		"hostname":    ip,
 		"port":        "22",
-		"username":    Username,
-		"private-key": PrivateKey,
+		"username":    username,
+		"private-key": privateKey,
 	}
 
 	for name, value := range parameters {
@@ -154,40 +146,7 @@ func GuacamoleConfig(Username string, UUID string, Ip string, PrivateKey string,
 	return userPass
 }
 
-// SHA256 해시 함수 (salt 포함)
-func hashPasswordWithSalt(password string, salt []byte) []byte {
-	hash := sha256.New()
-
-	var temp = hex.EncodeToString(salt)
-
-	temp = strings.ToUpper(temp)
-	hash.Write([]byte(password))
-	hash.Write([]byte(temp))
-	return hash.Sum(nil)
-}
-
-// 랜덤 salt 생성 (32바이트)
-func generateRandomSalt(length int) ([]byte, error) {
-	salt := make([]byte, length)
-	_, err := rand.Read(salt)
-	if err != nil {
-		return nil, err
-	}
-	return salt, nil
-}
-
-// 안전한 랜덤 비밀번호 생성 함수
-func generateRandomPassword(length int) (string, error) {
-	bytes := make([]byte, length)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(bytes)[:length], nil
-}
-
-// 뭔가뭔가 문제가 생겼을 때, 지우는 무언가
-func CleanupGuacamoleConfig(UUID string, db *sql.DB) error {
+func Cleanup(uuid string, db *sql.DB) error {
 	log := util.GetLogger()
 
 	if db == nil {
@@ -215,28 +174,25 @@ func CleanupGuacamoleConfig(UUID string, db *sql.DB) error {
 		}
 	}()
 
-	// Entity ID 찾기
 	var entityID int64
-	err = tx.QueryRow(`SELECT entity_id FROM guacamole_entity WHERE name = ? AND type = 'USER'`, UUID).Scan(&entityID)
+	err = tx.QueryRow(`SELECT entity_id FROM guacamole_entity WHERE name = ? AND type = 'USER'`, uuid).Scan(&entityID)
 	if err == sql.ErrNoRows {
-		log.DebugInfo("no entity found for UUID %s, nothing to clean up", UUID)
+		log.DebugInfo("no entity found for UUID %s, nothing to clean up", uuid)
 		return nil
 	} else if err != nil {
-		log.Error("failed to find entity for UUID %s: %v", UUID, err, true)
-		return fmt.Errorf("failed to find entity for UUID %s: %w", UUID, err)
+		log.Error("failed to find entity for UUID %s: %v", uuid, err, true)
+		return fmt.Errorf("failed to find entity for UUID %s: %w", uuid, err)
 	}
 
-	// Entity 삭제 // cascade로 user도 같이 삭제
 	_, err = tx.Exec(`DELETE FROM guacamole_entity WHERE entity_id = ?`, entityID)
 	if err != nil {
-		log.Error("failed to delete entity for UUID %s: %v", UUID, err, true)
-		return fmt.Errorf("failed to delete entity for UUID %s: %w", UUID, err)
+		log.Error("failed to delete entity for UUID %s: %v", uuid, err, true)
+		return fmt.Errorf("failed to delete entity for UUID %s: %w", uuid, err)
 	}
 
-	// UUID와 관련된 orphaned connections 정리
-	connectionName := fmt.Sprintf("%s-ssh", UUID)
+	connectionName := fmt.Sprintf("%s-ssh", uuid)
 	_, err = tx.Exec(`
-		DELETE FROM guacamole_connection 
+		DELETE FROM guacamole_connection
 		WHERE connection_name = ? AND connection_id NOT IN (
 			SELECT DISTINCT connection_id FROM guacamole_connection_permission
 		)
@@ -251,6 +207,6 @@ func CleanupGuacamoleConfig(UUID string, db *sql.DB) error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Info("successfully cleaned up configuration for UUID %s", UUID, true)
+	log.Info("successfully cleaned up configuration for UUID %s", uuid, true)
 	return nil
 }
