@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/easy-cloud-Knet/KWS_Control/request"
+	"github.com/easy-cloud-Knet/KWS_Control/client"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	"golang.org/x/sync/errgroup"
 
@@ -201,14 +201,14 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 
 		currentCore := core
 		g.Go(func() error {
-			client := request.NewCoreClient(currentCore)
+			coreClient := client.NewCoreClient(currentCore)
 
-			memResp, err := client.GetCoreMachineMemoryInfo(ctx)
+			memResp, err := coreClient.GetCoreMachineMemoryInfo(ctx)
 			if err != nil {
 				currentCore.IsAlive = false
 				return fmt.Errorf("failed to get Memory info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
 			}
-			diskResp, err := client.GetCoreMachineDiskInfo(ctx)
+			diskResp, err := coreClient.GetCoreMachineDiskInfo(ctx)
 			if err != nil {
 				currentCore.IsAlive = false
 				return fmt.Errorf("failed to get Disk info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
