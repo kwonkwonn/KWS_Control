@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/easy-cloud-Knet/KWS_Control/request/model"
+	"github.com/easy-cloud-Knet/KWS_Control/client/model"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 	"github.com/redis/go-redis/v9"

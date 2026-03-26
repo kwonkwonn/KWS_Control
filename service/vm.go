@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easy-cloud-Knet/KWS_Control/request"
-	"github.com/easy-cloud-Knet/KWS_Control/request/model"
+	"github.com/easy-cloud-Knet/KWS_Control/client"
+	"github.com/easy-cloud-Knet/KWS_Control/client/model"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 	"github.com/redis/go-redis/v9"
 
@@ -223,8 +223,8 @@ func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.Control
 	}
 
 	// Redis 저장 완료 후 HTTP 전송 (Core에서 Redis 업데이트 가능)
-	client := request.NewCoreClient(selectedCore)
-	_, err = client.CreateVM(context.Background(), req)
+	coreClient := client.NewCoreClient(selectedCore)
+	_, err = coreClient.CreateVM(context.Background(), req)
 	if err != nil {
 		log.Error("Error creating VM on core %s: %v", selectedCore.IP, err, true)
 		cleanup() // 직접 지우지 말고 요 함수 하나로--
@@ -264,8 +264,8 @@ func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Clien
 		return fmt.Errorf("VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-	_, err := client.DeleteVM(context.Background(), model.DeleteVMRequest{
+	coreClient := client.NewCoreClient(core)
+	_, err := coreClient.DeleteVM(context.Background(), model.DeleteVMRequest{
 		UUID: uuid,
 		Type: model.HardDelete,
 	})
@@ -299,8 +299,8 @@ func StartVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 		return fmt.Errorf("VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-	_, err := client.StartVM(context.Background(), model.StartVMRequest{
+	coreClient := client.NewCoreClient(core)
+	_, err := coreClient.StartVM(context.Background(), model.StartVMRequest{
 		UUID: uuid,
 	})
 	if err != nil {
@@ -317,8 +317,8 @@ func ShutdownVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Cli
 		return fmt.Errorf("VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-	_, err := client.ForceShutdownVM(context.Background(), model.ForceShutdownVMRequest{
+	coreClient := client.NewCoreClient(core)
+	_, err := coreClient.ForceShutdownVM(context.Background(), model.ForceShutdownVMRequest{
 		UUID: uuid,
 	})
 
@@ -356,9 +356,9 @@ func GetVMCpuInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreM
 		return model.CoreMachineCpuInfoResponse{}, errors.New(msg)
 	}
 
-	client := request.NewCoreClient(core)
+	coreClient := client.NewCoreClient(core)
 
-	cpuInfo, err := client.GetVMCpuInfo(context.Background(), uuid)
+	cpuInfo, err := coreClient.GetVMCpuInfo(context.Background(), uuid)
 	if err != nil {
 		msg := fmt.Sprintf("Error getting CPU info for VM %s on core %s: %v", uuid, core.IP, err)
 		log.Error(msg, true)
@@ -379,9 +379,9 @@ func GetVMMemoryInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.Co
 		return model.CoreMachineMemoryInfoResponse{}, errors.New(msg)
 	}
 
-	client := request.NewCoreClient(core)
+	coreClient := client.NewCoreClient(core)
 
-	memoryInfo, err := client.GetVMMemoryInfo(context.Background(), uuid)
+	memoryInfo, err := coreClient.GetVMMemoryInfo(context.Background(), uuid)
 	if err != nil {
 		msg := fmt.Sprintf("Error getting memory info for VM %s on core %s: %v", uuid, core.IP, err)
 		log.Error(msg, true)
@@ -402,9 +402,9 @@ func GetVMDiskInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.Core
 		return model.CoreMachineDiskInfoResponse{}, errors.New(msg)
 	}
 
-	client := request.NewCoreClient(core)
+	coreClient := client.NewCoreClient(core)
 
-	diskInfo, err := client.GetVMDiskInfo(context.Background(), uuid)
+	diskInfo, err := coreClient.GetVMDiskInfo(context.Background(), uuid)
 	if err != nil {
 		msg := fmt.Sprintf("Error getting disk info for VM %s on core %s: %v", uuid, core.IP, err)
 		log.Error(msg, true)

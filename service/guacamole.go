@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"github.com/easy-cloud-Knet/KWS_Control/request"
+	"github.com/easy-cloud-Knet/KWS_Control/client"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 )
 
@@ -13,14 +13,14 @@ func GetGuacamoleToken(uuid structure.UUID, ctx *structure.ControlContext) (stri
 	}
 
 	if vm, exists := core.VMInfoIdx[uuid]; exists {
-		client := request.NewGuacamoleClient(&ctx.Config)
+		guacClient := client.NewGuacamoleClient(&ctx.Config)
 
-		err := client.Authenticate(context.Background(), string(uuid), vm.GuacPassword)
+		err := guacClient.Authenticate(context.Background(), string(uuid), vm.GuacPassword)
 		if err != nil {
 			return "", err
 		}
 
-		return client.AuthToken(), nil
+		return guacClient.AuthToken(), nil
 	} else {
 		return "", structure.ErrVmNotFound(uuid)
 	}
