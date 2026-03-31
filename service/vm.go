@@ -2,12 +2,9 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/client"
@@ -22,32 +19,8 @@ import (
 
 // 새 VM 만드는 무언가.
 // 자원 많이 남은 코어를 찾고, 리소스 할당 업데이트, ControlContext 상태 업데이트.
-func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlContext, rdb *redis.Client) error {
+func CreateVM(req model.CreateVMRequest, contextStruct *vms.ControlContext, rdb *redis.Client) error {
 	log := util.GetLogger()
-
-	var req model.CreateVMRequest
-	defer r.Body.Close() // defer << 에러가 발생해도 body가 닫히도록 보장.
-
-	contentType := r.Header.Get("Content-Type")
-	if contentType == "" {
-		log.Warn("No Content-Type header specified, assuming application/json", true)
-	} else if !strings.Contains(contentType, "application/json") {
-		log.Warn("Content-Type is not application/json: %s", contentType, true)
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Error("err req body parsing: %v", err, true)
-		log.DebugError("Request Content-Type: %s", contentType)
-
-		if strings.Contains(err.Error(), "invalid character") {
-			return errors.New("invalid JSON format in request body - check for encoding issues or malformed JSON")
-		}
-		return errors.New("err req body parsing: " + err.Error())
-	}
-
-	if req.HardwareInfo.Memory == 0 || req.HardwareInfo.CPU == 0 || req.HardwareInfo.Disk == 0 {
-		return errors.New("invalid JSON format in request body - check for Memory or CPU or Disk")
-	}
 
 	log.Info("func CreateVM() memory=%d GiB, cpu=%d, disk=%d GiB", req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk, true)
 

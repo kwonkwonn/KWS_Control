@@ -20,14 +20,14 @@ func Server(portNum int, contextStruct *vms.ControlContext, rdb *redis.Client) e
 		rdb:     rdb,
 	}
 
-	http.HandleFunc("POST /vm", h.createVm)
-	http.HandleFunc("DELETE /vm", h.deleteVm)
-	http.HandleFunc("POST /vm/shutdown", h.shutdownVm)
-	http.HandleFunc("GET /vm/status", h.vmStatus)
-	http.HandleFunc("GET /vm/connect", h.vmConnect)
-	http.HandleFunc("POST /vm/redis", h.redis)
-	http.HandleFunc("GET /vm/info", h.vmInfo)
-	http.HandleFunc("POST /vm/start", h.startVm)
+	http.HandleFunc("POST /vm", withSecurityHeaders(h.createVm))
+	http.HandleFunc("DELETE /vm", withSecurityHeaders(h.deleteVm))
+	http.HandleFunc("POST /vm/shutdown", withSecurityHeaders(h.shutdownVm))
+	http.HandleFunc("GET /vm/status", withSecurityHeaders(h.vmStatus))
+	http.HandleFunc("GET /vm/connect", withSecurityHeaders(h.vmConnect))
+	http.HandleFunc("POST /vm/redis", withSecurityHeaders(h.redis))
+	http.HandleFunc("GET /vm/info", withSecurityHeaders(h.vmInfo))
+	http.HandleFunc("POST /vm/start", withSecurityHeaders(h.startVm))
 
 	fmt.Printf("Running server on port %d\n", portNum)
 	err := http.ListenAndServe(":"+strconv.Itoa(portNum), nil)

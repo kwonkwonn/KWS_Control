@@ -23,19 +23,19 @@ type ApiVmInfoResponse struct {
 
 func (c *handlerContext) vmInfo(w http.ResponseWriter, r *http.Request) {
 	log := util.GetLogger()
+	defer r.Body.Close()
 
 	var req ApiVmInfoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		util.RespondError(w, http.StatusBadRequest, "invalid request body")
 		log.Error("Invalid request body: %v", err, true)
 		return
 	}
-	defer r.Body.Close()
 
 	vmInfo, err := service.GetVMInfoFromRedis(r.Context(), c.rdb, req.UUID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
 		log.Error("failed to get vm info from redis: %v", err, true)
+		util.RespondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
@@ -47,12 +47,6 @@ func (c *handlerContext) vmInfo(w http.ResponseWriter, r *http.Request) {
 		IP:     vmInfo.IP,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Error("failed to encode vm info response: %v", err, true)
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
-	}
-
+	util.RespondJSON(w, http.StatusOK, response)
 	log.Info("retrieved vm info from redis: UUID=%s", string(req.UUID), true)
 }

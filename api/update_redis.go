@@ -42,14 +42,14 @@ func ValidateAndNormalizeStatus(status string) string {
 
 func (c *handlerContext) redis(w http.ResponseWriter, r *http.Request) {
 	log := util.GetLogger()
+	defer r.Body.Close()
 
 	var req RedisStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		util.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		log.Error("Invalid request body: %v", err, true)
 		return
 	}
-	defer r.Body.Close()
 
 	originalStatus := req.Status
 	normalizedStatus := ValidateAndNormalizeStatus(req.Status)
@@ -61,14 +61,14 @@ func (c *handlerContext) redis(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	err := service.UpdateVMStatusInRedis(ctx, c.rdb, req.UUID, normalizedStatus, time.Now().Unix())
 	if err != nil {
-		http.Error(w, "Failed to update VM status in Redis", http.StatusInternalServerError)
+		util.RespondError(w, http.StatusInternalServerError, "Failed to update VM status in Redis")
 		log.Error("Failed to update VM status in Redis: %v", err, true)
 		return
 	}
 
 	storedValue, err := c.rdb.Get(ctx, string(req.UUID)).Result()
 	if err != nil {
-		http.Error(w, "Failed to get value from Redis", http.StatusInternalServerError)
+		util.RespondError(w, http.StatusInternalServerError, "Failed to get value from Redis")
 		log.Error("Redis GET failed: %v", err, true)
 		return
 	}

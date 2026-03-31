@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/easy-cloud-Knet/KWS_Control/service"
@@ -22,7 +21,7 @@ func (c *handlerContext) vmConnect(w http.ResponseWriter, r *http.Request) {
 
 	uuidStr := r.URL.Query().Get("uuid")
 	if uuidStr == "" {
-		http.Error(w, "Missing 'uuid' query parameter", http.StatusBadRequest)
+		util.RespondError(w, http.StatusBadRequest, "Missing 'uuid' query parameter")
 		log.Error("Missing 'uuid' query parameter", nil, true)
 		return
 	}
@@ -30,15 +29,10 @@ func (c *handlerContext) vmConnect(w http.ResponseWriter, r *http.Request) {
 	uuid := structure.UUID(uuidStr)
 	authToken, err := service.GetGuacamoleToken(uuid, c.context)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Error("Failed to get Guacamole token: %v", err, true)
+		util.RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ApiVmConnectResponse{AuthToken: authToken}); err != nil {
-		log.Error("Failed to encode response: %v", err, true)
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	util.RespondJSON(w, http.StatusOK, ApiVmConnectResponse{AuthToken: authToken})
 }

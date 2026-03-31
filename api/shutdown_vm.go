@@ -6,6 +6,7 @@ import (
 
 	"github.com/easy-cloud-Knet/KWS_Control/service"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
 type ApiShutdownVmRequest struct {
@@ -25,16 +26,17 @@ type ApiForceShutdownVmResponse struct {
 }
 
 func (c *handlerContext) shutdownVm(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
 	var req ApiShutdownVmRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		util.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	defer r.Body.Close()
 
 	err := service.ShutdownVM(req.UUID, c.context, c.rdb)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		util.RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
