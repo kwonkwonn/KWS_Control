@@ -120,17 +120,27 @@ func (c *CmsClient) NewCmsSubnet(ctx *vms.ControlContext) (*CmsResponse, error) 
 	next_last_subnet := pkgnetwork.FindSubnet(last_subnet)
 	log.Info("NewCmsSubnet : next_last_subnet: %s", next_last_subnet)
 
-	temp, err := c.CmsRequest(next_last_subnet)
-	if err != nil {
-		log.Error("NewCmsSubnet : c.CmsRequest(subnet): %v", err)
-		return nil, fmt.Errorf("NewCmsSubnet: CmsRequest failed: %w", err)
-	}
-	_, err = ctx.DB.Exec("UPDATE subnet SET last_subnet = ? WHERE id = 1", next_last_subnet)
+	// DB를 먼저 업데이트하여 서브넷을 선점한다.
+	// CMS 호출 전에 선점해야 실패 시 동일 서브넷이 중복 할당되는 것을 방지할 수 있다.
+	_, err := ctx.DB.Exec("UPDATE subnet SET last_subnet = ? WHERE id = 1", next_last_subnet)
 	if err != nil {
 		log.Error("Failed to update last_subnet in database: %v", err)
 		return nil, fmt.Errorf("NewCmsSubnet: failed to update last_subnet in DB: %w", err)
 	}
 	ctx.Last_subnet = next_last_subnet
+
+	temp, err := c.CmsRequest(next_last_subnet)
+	if err != nil {
+		log.Error("NewCmsSubnet : c.CmsRequest(subnet): %v", err)
+		// CMS 호출 실패 시 DB를 원래 값으로 롤백
+		if _, rbErr := ctx.DB.Exec("UPDATE subnet SET last_subnet = ? WHERE id = 1", last_subnet); rbErr != nil {
+			log.Error("NewCmsSubnet : failed to rollback last_subnet: %v", rbErr)
+			return nil, fmt.Errorf("NewCmsSubnet: CmsRequest failed: %w, rollback also failed: %v", err, rbErr)
+		}
+		ctx.Last_subnet = last_subnet
+		return nil, fmt.Errorf("NewCmsSubnet: CmsRequest failed: %w", err)
+	}
+
 	return temp, nil
 }
 
