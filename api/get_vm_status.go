@@ -16,18 +16,18 @@ type ApiVmStatusRequest struct {
 
 func (c *handlerContext) vmStatus(w http.ResponseWriter, r *http.Request) {
 	log := util.GetLogger()
+	defer r.Body.Close()
 
 	var req ApiVmStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		util.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		log.Error("Failed to decode request body: %v", err, true)
 		return
 	}
-	defer r.Body.Close()
 
 	statusType := req.Type
 	if statusType != "cpu" && statusType != "memory" && statusType != "disk" {
-		http.Error(w, "Invalid status type. Must be 'cpu', 'memory', or 'disk'", http.StatusBadRequest)
+		util.RespondError(w, http.StatusBadRequest, "Invalid status type. Must be 'cpu', 'memory', or 'disk'")
 		return
 	}
 
@@ -44,15 +44,10 @@ func (c *handlerContext) vmStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		log.Error("Failed to get VM status: %v", err, true)
+		util.RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Error("Failed to encode response: %v", err, true)
-		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	util.RespondJSON(w, http.StatusOK, data)
 }

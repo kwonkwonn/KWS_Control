@@ -6,6 +6,7 @@ import (
 
 	"github.com/easy-cloud-Knet/KWS_Control/service"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
+	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
 type ApiDeleteVmRequest struct {
@@ -13,16 +14,20 @@ type ApiDeleteVmRequest struct {
 }
 
 func (c *handlerContext) deleteVm(w http.ResponseWriter, r *http.Request) {
+	log := util.GetLogger()
+	defer r.Body.Close()
+
 	var req ApiDeleteVmRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		log.Error("deleteVm: failed to decode request body: %v", err, true)
+		util.RespondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	defer r.Body.Close()
 
 	err := service.DeleteVM(req.UUID, c.context, c.rdb)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Error("deleteVm: failed to delete VM: %v", err, true)
+		util.RespondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/easy-cloud-Knet/KWS_Control/client"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 )
@@ -17,7 +19,7 @@ func GetGuacamoleToken(uuid structure.UUID, ctx *structure.ControlContext) (stri
 
 		err := guacClient.Authenticate(context.Background(), string(uuid), vm.GuacPassword)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("GetGuacamoleToken: failed to authenticate: %w", err)
 		}
 
 		return guacClient.AuthToken(), nil
