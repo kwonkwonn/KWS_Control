@@ -3,12 +3,14 @@ package structure
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"time"
 
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 )
 
 type ControlContext struct {
+	mu          sync.RWMutex
 	Config      Config
 	DB          *sql.DB
 	GuacDB      *sql.DB
@@ -20,6 +22,11 @@ type ControlContext struct {
 	// => 근데 이거 자료형을 어떤걸 써야할지 모르겠어서 일단 이렇게 map[UUID]*Core로 해놓은거지 2차원 벡터로 해도 무방할거 같습니다.
 	// => 이렇게 한 이유는 이전 버전에서 VMPool map[UUID]*VM 이렇게 해놓았던데 이렇게 하면 VM이 많아졌을 때 너무 오래 걸릴거 같아서 IP를 기반으로 먼저 찾고 해당 core로 넘어가서 처리하면 더 좋지않을까? 생각했어요.
 }
+
+func (c *ControlContext) Lock()    { c.mu.Lock() }
+func (c *ControlContext) Unlock()  { c.mu.Unlock() }
+func (c *ControlContext) RLock()   { c.mu.RLock() }
+func (c *ControlContext) RUnlock() { c.mu.RUnlock() }
 
 func (c *ControlContext) FindCoreByVmUUID(uuid UUID) *Core {
 	log := util.GetLogger()

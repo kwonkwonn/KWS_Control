@@ -145,6 +145,9 @@ func (c *CmsClient) NewCmsSubnet(ctx *vms.ControlContext) (*CmsResponse, error) 
 }
 
 func GetVMIPByUUID(ctx *vms.ControlContext, uuid vms.UUID) (string, error) {
+	ctx.RLock()
+	defer ctx.RUnlock()
+
 	core, ok := ctx.VMLocation[uuid]
 	if !ok {
 		return "", fmt.Errorf("UUID %s not found in VMLocation", uuid)
