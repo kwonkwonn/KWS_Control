@@ -36,10 +36,10 @@ func CreateVM(req model.CreateVMRequest, contextStruct *vms.ControlContext, rdb 
 	aliveCount := 0
 
 	// Cores/FreeMemory 등 공유 상태를 읽으므로 RLock (동시 읽기는 허용, 쓰기만 차단)
-	contextStruct.RLock()
-	for i := range contextStruct.Cores {
+	contextStruct.Resources.RLock()
+	for i := range contextStruct.Resources.Cores {
 
-		core := &contextStruct.Cores[i]
+		core := &contextStruct.Resources.Cores[i]
 		log.DebugInfo("core %s checking: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d, IsAlive=%t", core.IP, core.FreeMemory, core.FreeCPU, core.FreeDisk, core.IsAlive)
 
 		if !core.IsAlive {
@@ -76,16 +76,16 @@ func CreateVM(req model.CreateVMRequest, contextStruct *vms.ControlContext, rdb 
 		}
 	}
 	// 코어 탐색 완료 후 즉시 해제 — 이후 CMS/Guacamole 네트워크 콜은 락 없이 진행
-	contextStruct.RUnlock()
+	contextStruct.Resources.RUnlock()
 
 	if selectedCore == nil {
 		log.Error("No suitable core found! Total cores: %d, Alive cores: %d, Required: Memory=%d CPU=%d Disk=%d",
-			len(contextStruct.Cores), aliveCount, req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk, true)
+			len(contextStruct.Resources.Cores), aliveCount, req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk, true)
 
 		if aliveCount > 0 {
 			log.DebugError("alive cores:")
-			for i := range contextStruct.Cores {
-				core := &contextStruct.Cores[i]
+			for i := range contextStruct.Resources.Cores {
+				core := &contextStruct.Resources.Cores[i]
 				if core.IsAlive {
 					log.DebugError("  %s: Memory=%d/%d, CPU=%d/%d, Disk=%d/%d",
 						core.IP, core.FreeMemory, core.CoreInfoIdx.Memory, core.FreeCPU, core.CoreInfoIdx.Cpu, core.FreeDisk, core.CoreInfoIdx.Disk)
@@ -121,12 +121,12 @@ func CreateVM(req model.CreateVMRequest, contextStruct *vms.ControlContext, rdb 
 		}
 		if coreResourcesAllocated {
 			// VMInfoIdx와 Free* 필드는 여러 핸들러가 동시에 접근하므로 Lock 필요
-			contextStruct.Lock()
+			contextStruct.Resources.Lock()
 			delete(selectedCore.VMInfoIdx, uuid)
 			selectedCore.FreeMemory += req.HardwareInfo.Memory
 			selectedCore.FreeCPU += req.HardwareInfo.CPU
 			selectedCore.FreeDisk += req.HardwareInfo.Disk
-			contextStruct.Unlock()
+			contextStruct.Resources.Unlock()
 		}
 		if newSubnetAllocated {
 			//subnet--
@@ -171,7 +171,7 @@ func CreateVM(req model.CreateVMRequest, contextStruct *vms.ControlContext, rdb 
 
 	// VMInfoIdx map 쓰기 + Free* 필드 감소는 원자적으로 처리해야 함
 	// (다른 CreateVM goroutine이 Free* 읽고 같은 코어 선택하는 race 방지)
-	contextStruct.Lock()
+	contextStruct.Resources.Lock()
 	if selectedCore.VMInfoIdx == nil {
 		selectedCore.VMInfoIdx = make(map[vms.UUID]*vms.VMInfo)
 	}
@@ -180,7 +180,7 @@ func CreateVM(req model.CreateVMRequest, contextStruct *vms.ControlContext, rdb 
 	selectedCore.FreeCPU -= req.HardwareInfo.CPU
 	selectedCore.FreeDisk -= req.HardwareInfo.Disk
 	coreResourcesAllocated = true
-	contextStruct.Unlock()
+	contextStruct.Resources.Unlock()
 	// 이후 HTTP 전송은 락 밖에서 — 네트워크 콜 중 락을 잡으면 다른 요청 전체가 블로킹됨
 
 	log.DebugInfo("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
@@ -216,7 +216,7 @@ func CreateVM(req model.CreateVMRequest, contextStruct *vms.ControlContext, rdb 
 		return fmt.Errorf("CreateVM: failed to create VM on core %s: %w", selectedCore.IP, err)
 	}
 
-	err = contextStruct.AddInstance(newVM, selectedCoreIndex)
+	err = contextStruct.VMRepo.AddInstance(newVM, selectedCoreIndex)
 	if err != nil {
 		log.Error("Error database instance insertion failed: %v", err, true)
 		cleanup() // 직접 지우지 말고 요 함수 하나로--
@@ -231,13 +231,10 @@ func CreateVM(req model.CreateVMRequest, contextStruct *vms.ControlContext, rdb 
 
 	// VMLocation map과 AliveVM slice를 하나의 Lock으로 묶어 일관성 보장
 	// (VMLocation에는 있는데 AliveVM에는 없는 중간 상태가 노출되지 않도록)
-	contextStruct.Lock()
-	if contextStruct.VMLocation == nil {
-		contextStruct.VMLocation = make(map[vms.UUID]*vms.Core)
-	}
-	contextStruct.VMLocation[uuid] = &contextStruct.Cores[selectedCoreIndex]
-	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
-	contextStruct.Unlock()
+	contextStruct.Resources.Lock()
+	contextStruct.Resources.VMLocation[uuid] = &contextStruct.Resources.Cores[selectedCoreIndex]
+	contextStruct.Resources.AliveVM = append(contextStruct.Resources.AliveVM, newVM)
+	contextStruct.Resources.Unlock()
 	log.Info("VM %s added to ControlContext", uuid, true)
 
 	log.Info("UUID %s CreateVM request success on core %s", uuid, selectedCore.IP, true)
@@ -262,7 +259,7 @@ func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Clien
 		return fmt.Errorf("DeleteVM: failed to delete VM %s on core %s: %w", uuid, core.IP, err)
 	}
 
-	err = contextStruct.DeleteInstance(uuid)
+	err = contextStruct.VMRepo.DeleteInstance(uuid)
 	if err != nil {
 		log.Error("error deleting instance %s from ControlContext: %v", uuid, err)
 		return fmt.Errorf("DeleteVM: failed to delete instance %s: %w", uuid, err)
@@ -316,8 +313,8 @@ func ShutdownVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Cli
 
 	foundIndex := -1
 	// 탐색과 삭제를 하나의 Lock 안에서 — 탐색 후 삭제 전에 다른 goroutine이 AliveVM을 바꾸면 index가 틀어짐
-	contextStruct.Lock()
-	for i, vm := range contextStruct.AliveVM {
+	contextStruct.Resources.Lock()
+	for i, vm := range contextStruct.Resources.AliveVM {
 		if vm.UUID == uuid {
 			foundIndex = i
 			break
@@ -325,9 +322,9 @@ func ShutdownVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Cli
 	}
 
 	if foundIndex != -1 {
-		contextStruct.AliveVM = slices.Delete(contextStruct.AliveVM, foundIndex, foundIndex+1)
+		contextStruct.Resources.AliveVM = slices.Delete(contextStruct.Resources.AliveVM, foundIndex, foundIndex+1)
 	}
-	contextStruct.Unlock()
+	contextStruct.Resources.Unlock()
 
 	if err := UpdateVMStatusInRedis(context.Background(), rdb, uuid, model.VMStatusStopped, time.Now().Unix()); err != nil {
 		log := util.GetLogger()
