@@ -17,17 +17,22 @@ func NewMySQLVMRepository(db *sql.DB) *MySQLVMRepository {
 	return &MySQLVMRepository{DB: db}
 }
 
+// AddInstance adds a new instance to the DB and associates it with a core index.
 func (r *MySQLVMRepository) AddInstance(instanceInfo *VMInfo, coreIdx int) error {
 	log := util.GetLogger()
-	tx, err := r.DB.Begin()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("Failed to start transaction %v", err)
 		return err
 	}
-	defer tx.Rollback()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			log.Error("Failed to rollback transaction: %v", err)
+		}
+	}()
 
 	_, err = tx.ExecContext(ctx, "INSERT INTO inst_info (uuid, inst_ip, guac_pass, inst_mem, inst_vcpu, inst_disk) VALUES (?, ?, ?, ?, ?, ?)",
 		string(instanceInfo.UUID),
@@ -50,17 +55,23 @@ func (r *MySQLVMRepository) AddInstance(instanceInfo *VMInfo, coreIdx int) error
 	return tx.Commit()
 }
 
+// UpdateInstance updates the instance information in DB for the given VM UUID.
+// Note: Guacamole password is not updated here as it is generated only once at instance creation. If needed, it can be added as well.
 func (r *MySQLVMRepository) UpdateInstance(instanceInfo *VMInfo) error {
 	log := util.GetLogger()
-	tx, err := r.DB.Begin()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("Failed to start transaction %v", err)
 		return err
 	}
-	defer tx.Rollback()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			log.Error("Failed to rollback transaction: %v", err)
+		}
+	}()
 
 	_, err = tx.ExecContext(ctx, "UPDATE inst_info SET inst_ip = ?, inst_mem = ?, inst_vcpu = ?, inst_disk = ? WHERE uuid = ?",
 		instanceInfo.IP_VM,
@@ -75,17 +86,22 @@ func (r *MySQLVMRepository) UpdateInstance(instanceInfo *VMInfo) error {
 	return tx.Commit()
 }
 
+// DeleteInstance deletes the instance in DB for the given VM UUID.
 func (r *MySQLVMRepository) DeleteInstance(uuid UUID) error {
 	log := util.GetLogger()
-	tx, err := r.DB.Begin()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("Failed to start transaction: %v", err)
 		return err
 	}
-	defer tx.Rollback()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			log.Error("Failed to rollback transaction: %v", err)
+		}
+	}()
 
 	_, err = tx.ExecContext(ctx, "DELETE FROM inst_info WHERE uuid = ?", uuid)
 	if err != nil {
@@ -98,17 +114,22 @@ func (r *MySQLVMRepository) DeleteInstance(uuid UUID) error {
 	return tx.Commit()
 }
 
+// GetInstance returns the Instance information for the given VM UUID.
 func (r *MySQLVMRepository) GetInstance(uuid UUID) (*VMInfo, error) {
 	log := util.GetLogger()
-	tx, err := r.DB.Begin()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("Failed to start transaction: %v", err)
 		return nil, err
 	}
-	defer tx.Rollback()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			log.Error("Failed to rollback transaction: %v", err)
+		}
+	}()
 
 	var instance VMInfo
 	err = tx.QueryRowContext(ctx, "SELECT uuid, inst_ip, guac_pass, inst_mem, inst_vcpu, inst_disk FROM inst_info WHERE uuid = ?", uuid).Scan(
@@ -125,17 +146,22 @@ func (r *MySQLVMRepository) GetInstance(uuid UUID) (*VMInfo, error) {
 	return &instance, tx.Commit()
 }
 
+// GetInstanceLocation returns the core index for the given VM UUID.
 func (r *MySQLVMRepository) GetInstanceLocation(uuid UUID) (int, error) {
 	log := util.GetLogger()
-	tx, err := r.DB.Begin()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("Failed to start transaction: %v", err)
 		return 0, err
 	}
-	defer tx.Rollback()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			log.Error("Failed to rollback transaction: %v", err)
+		}
+	}()
 
 	var coreIdx int
 	err = tx.QueryRowContext(ctx, "SELECT core FROM inst_loc WHERE uuid = ?", uuid).Scan(&coreIdx)
@@ -146,17 +172,22 @@ func (r *MySQLVMRepository) GetInstanceLocation(uuid UUID) (int, error) {
 	return coreIdx, tx.Commit()
 }
 
+// GetAllInstanceInfo returns the list of all instance information and their corresponding core indices.
 func (r *MySQLVMRepository) GetAllInstanceInfo() ([]VMInfo, []int, error) {
 	log := util.GetLogger()
-	tx, err := r.DB.Begin()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
 		log.Error("Failed to start transaction: %v", err)
 		return nil, nil, err
 	}
-	defer tx.Rollback()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			log.Error("Failed to rollback transaction: %v", err)
+		}
+	}()
 
 	var rows *sql.Rows
 	rows, err = tx.QueryContext(ctx, "SELECT info.uuid, loc.core, info.inst_ip, info.guac_pass, info.inst_vcpu, info.inst_mem, info.inst_disk FROM inst_loc loc JOIN inst_info info ON loc.uuid = info.uuid")
@@ -180,5 +211,11 @@ func (r *MySQLVMRepository) GetAllInstanceInfo() ([]VMInfo, []int, error) {
 		VMInfoList = append(VMInfoList, info)
 		coreIdxList = append(coreIdxList, coreIdx)
 	}
+
+	if err := rows.Err(); err != nil {
+		log.Error("Failed to iterate instance information rows: %v", err)
+		return nil, nil, err
+	}
+
 	return VMInfoList, coreIdxList, tx.Commit()
 }
