@@ -15,17 +15,31 @@ type ControlContext struct {
 	Last_subnet string
 }
 
+// FindCoreByVmUUID search cores for the given VM UUID and returns the corresponding Core.
 func (c *ControlContext) FindCoreByVmUUID(uuid UUID) *Core {
 	log := util.GetLogger()
 
+	// Searching in-memory cache
+	c.Resources.RLock()
+	if core, ok := c.Resources.VMLocation[uuid]; ok {
+		c.Resources.RUnlock()
+		return core
+	}
+	c.Resources.RUnlock()
+
+	// If not found in cache, query the repository
 	coreIdx, err := c.VMRepo.GetInstanceLocation(uuid)
 	if err != nil {
 		log.Error("Core not found for VM UUID %s", uuid, true)
 		return nil
 	}
+	c.Resources.Lock()
+	defer c.Resources.Unlock()
 	if coreIdx < 0 || coreIdx >= len(c.Resources.Cores) {
 		log.Error("Core index %d out of range for VM UUID %s", coreIdx, uuid, true)
 		return nil
 	}
-	return &c.Resources.Cores[coreIdx]
+	core := &c.Resources.Cores[coreIdx]
+	c.Resources.VMLocation[uuid] = core
+	return core
 }
