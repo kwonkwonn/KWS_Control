@@ -17,14 +17,22 @@ type CmsClient struct {
 	client  *http.Client
 }
 
-type CmsResponse struct {
+type CmsNewInstanceResponse struct {
 	IP      string `json:"ip"`
 	MacAddr string `json:"macAddr"`
 	SdnUUID string `json:"sdnUUID"`
 }
 
-type cmsRequestBody struct {
+type CmsDeleteInstanceResponse struct {
+	Detail string `json:"detail,omitempty"`
+}
+
+type cmsNewInstanceRequestBody struct {
 	Subnet string `json:"Subnet"`
+}
+
+type cmsDeleteInstanceRequestBody struct {
+	IP string `json:"ip"`
 }
 
 func NewCmsClient() *CmsClient {
@@ -43,12 +51,52 @@ func NewCmsClient() *CmsClient {
 	}
 }
 
-// RequestNewInstance는 주어진 서브넷에 대해 CMS에 새 인스턴스 할당을 요청한다.
-func (c *CmsClient) RequestNewInstance(subnet string) (*CmsResponse, error) {
+func (c *CmsClient) RequestDeleteInstance(ip string) (*CmsDeleteInstanceResponse, error) {
 	log := util.GetLogger()
 
 	reqURL := fmt.Sprintf("http://%s/New/Instance", c.baseURL)
-	jsonBody, err := json.Marshal(cmsRequestBody{Subnet: subnet})
+	jsonBody, err := json.Marshal(cmsDeleteInstanceRequestBody{IP: ip})
+	if err != nil {
+		log.Error("CMS : failed to marshal JSON: %v", err)
+		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: failed to marshal JSON: %w", err)
+	}
+	req, err := http.NewRequest("DELETE", reqURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		log.Error("CMS : failed to NewRequest: %v", err)
+		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: failed to create HTTP request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	log.DebugInfo("Making request to: %s", reqURL)
+	log.DebugInfo("Request body: %s", string(jsonBody))
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		log.Error("CMS : failed to send request: %v", err)
+		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Error("CMS : CMS returned status: %s", resp.Status)
+		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: CMS server returned non-OK status: %s", resp.Status)
+	}
+
+	var addrResp CmsDeleteInstanceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&addrResp); err != nil {
+		log.Error("CMS : failed to decode CMS response: %v", err)
+		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: failed to decode response: %w", err)
+	}
+	return &addrResp, nil
+}
+
+// RequestNewInstance는 주어진 서브넷에 대해 CMS에 새 인스턴스 할당을 요청한다.
+func (c *CmsClient) RequestNewInstance(subnet string) (*CmsNewInstanceResponse, error) {
+	log := util.GetLogger()
+
+	reqURL := fmt.Sprintf("http://%s/New/Instance", c.baseURL)
+	jsonBody, err := json.Marshal(cmsNewInstanceRequestBody{Subnet: subnet})
 	if err != nil {
 		log.Error("CMS : failed to marshal JSON: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestNewInstance: failed to marshal JSON: %w", err)
@@ -74,10 +122,10 @@ func (c *CmsClient) RequestNewInstance(subnet string) (*CmsResponse, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		log.Error("CMS : CMS returned status: %s", resp.Status)
-		return nil, fmt.Errorf("CMS server returned non-OK status: %s", resp.Status)
+		return nil, fmt.Errorf("CmsClient.RequestNewInstance: CMS server returned non-OK status: %s", resp.Status)
 	}
 
-	var addrResp CmsResponse
+	var addrResp CmsNewInstanceResponse
 	if err := json.NewDecoder(resp.Body).Decode(&addrResp); err != nil {
 		log.Error("CMS : failed to decode CMS response: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestNewInstance: failed to decode response: %w", err)

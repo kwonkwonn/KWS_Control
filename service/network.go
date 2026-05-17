@@ -10,7 +10,7 @@ import (
 )
 
 // AddCmsSubnet은 기존 VM의 IP가 속한 서브넷으로 CMS에 새 인스턴스 할당을 요청
-func AddCmsSubnet(c *client.CmsClient, ctx *vms.ControlContext, uuid vms.UUID) (*client.CmsResponse, error) {
+func AddCmsSubnet(c *client.CmsClient, ctx *vms.ControlContext, uuid vms.UUID) (*client.CmsNewInstanceResponse, error) {
 	log := util.GetLogger()
 
 	ip, err := GetVMIPByUUID(ctx, uuid)
@@ -32,7 +32,7 @@ func AddCmsSubnet(c *client.CmsClient, ctx *vms.ControlContext, uuid vms.UUID) (
 }
 
 // NewCmsSubnet은 다음 서브넷을 계산하여 DB에 선점한 뒤 CMS에 인스턴스 할당을 요청
-func NewCmsSubnet(c *client.CmsClient, ctx *vms.ControlContext) (*client.CmsResponse, error) {
+func NewCmsSubnet(c *client.CmsClient, ctx *vms.ControlContext) (*client.CmsNewInstanceResponse, error) {
 	log := util.GetLogger()
 
 	lastSubnet := ctx.Last_subnet
@@ -59,6 +59,21 @@ func NewCmsSubnet(c *client.CmsClient, ctx *vms.ControlContext) (*client.CmsResp
 		return nil, fmt.Errorf("NewCmsSubnet: CMS request failed: %w", err)
 	}
 	return resp, nil
+}
+func DeleteCmsSubnet(c *client.CmsClient, ctx *vms.ControlContext, uuid vms.UUID) error {
+	log := util.GetLogger()
+
+	ip, err := GetVMIPByUUID(ctx, uuid)
+	if err != nil {
+		log.Error("DeleteCmsSubnet : GetVMIPByUUID: %v", err)
+		return fmt.Errorf("DeleteCmsSubnet: failed to get VM IP: %w", err)
+	}
+	_, err = c.RequestDeleteInstance(ip)
+	if err != nil {
+		log.Error("DeleteCmsSubnet : RequestDeleteInstance: %v", err)
+		return fmt.Errorf("DeleteCmsSubnet: CMS request failed: %w", err)
+	}
+	return nil
 }
 
 func GetVMIPByUUID(ctx *vms.ControlContext, uuid vms.UUID) (string, error) {

@@ -42,23 +42,28 @@ func CreateVM(input CreateVMInput, contextStruct *vms.ControlContext, rdb *redis
 	// 단계별 롤백 등록을 위한 chain
 	cleanup := &cleanupChain{}
 
+	//사용자 수 확인
+	if len(input.Users) == 0 {
+		cleanup.run()
+		log.Error("CreateVM: at least one user is required for Guacamole configuration", true)
+		return fmt.Errorf("CreateVM: at least one user is required")
+	}
+
 	// 3) CMS 서브넷 할당 (Add: 기존 서브넷 / New: 신규 서브넷)
-	cmsResp, isNewSubnet, err := allocateCmsSubnet(contextStruct, input.SubnetType, uuid, cleanup)
+	cmsResp, isNewSubnet, err := allocateCmsSubnet(contextStruct, input.SubnetType, uuid)
 	if err != nil {
-		return err
+		//TODO  AllocateCmsSubnet cleanup logic implement
+		log.Error("CreateVM: failed to allocate CMS subnet: %v", err, true)
+		return fmt.Errorf("CreateVM: failed to allocate CMS subnet: %w", err)
 	}
 
 	log.DebugInfo("CMS allocated: ip=%s, mac=%s, sdn=%s", cmsResp.IP, cmsResp.MacAddr, cmsResp.SdnUUID)
 
 	// 4) Guacamole 사용자/커넥션 설정
-	if len(input.Users) == 0 {
-		cleanup.run()
-		return fmt.Errorf("CreateVM: at least one user is required")
-	}
 	userPass := guacamole.Configure(input.Users[0].Name, string(uuid), cmsResp.IP, privateKeyPEM, contextStruct.GuacDB)
 	if userPass == "" {
-		log.Error("CreateVM: failed to configure Guacamole", true)
 		cleanup.run()
+		log.Error("CreateVM: failed to configure Guacamole", true)
 		return fmt.Errorf("CreateVM: failed to configure Guacamole")
 	}
 	cleanup.push(func() {
@@ -131,7 +136,7 @@ func CreateVM(input CreateVMInput, contextStruct *vms.ControlContext, rdb *redis
 }
 
 // 추후 Mapper 계층이 필요할 것으로 예상됨
-func buildCoreCreateVMRequest(input CreateVMInput, cmsResp *client.CmsResponse, publicKeyOpenSSH string) model.CreateVMRequest {
+func buildCoreCreateVMRequest(input CreateVMInput, cmsResp *client.CmsNewInstanceResponse, publicKeyOpenSSH string) model.CreateVMRequest {
 	users := make([]model.UserInfoVM, len(input.Users))
 	for i, u := range input.Users {
 		users[i] = model.UserInfoVM{
@@ -194,7 +199,7 @@ func selectCoreOrFail(contextStruct *vms.ControlContext, req vms.HardwareRequire
 	return nil, -1, fmt.Errorf("CreateVM: no suitable core found")
 }
 
-func allocateCmsSubnet(contextStruct *vms.ControlContext, subnetType string, uuid vms.UUID, cleanup *cleanupChain) (*client.CmsResponse, bool, error) {
+func allocateCmsSubnet(contextStruct *vms.ControlContext, subnetType string, uuid vms.UUID) (*client.CmsNewInstanceResponse, bool, error) {
 	log := util.GetLogger()
 	cmsClient := client.NewCmsClient()
 
@@ -213,9 +218,7 @@ func allocateCmsSubnet(contextStruct *vms.ControlContext, subnetType string, uui
 		return nil, false, fmt.Errorf("CreateVM: failed to configure cms: %w", err)
 	}
 	// 신규 서브넷 할당 시: 후속 단계 실패에 대한 별도 DB 롤백 로직은 미구현 상태 (TODO)
-	cleanup.push(func() {
-		log.Warn("clean up: new subnet allocation rollback is not implemented")
-	})
+
 	return resp, true, nil
 }
 
@@ -236,6 +239,12 @@ func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Clien
 	}); err != nil {
 		log.Error("error deleting VM %s on core %s: %v", uuid, core.IP, err)
 		return fmt.Errorf("DeleteVM: failed to delete VM %s on core %s: %w", uuid, core.IP, err)
+	}
+
+	cmsClient := client.NewCmsClient()
+	if err := DeleteCmsSubnet(cmsClient, contextStruct, uuid); err != nil {
+		log.Error("DeleteVM: failed to delete CMS subnet for VM %s: %v", uuid, err)
+		// CMS 삭제 실패는 로그만 남기고 삭제 자체는 성공으로 처리 (추가적인 수동 정리 필요)
 	}
 
 	// 2) DB에서 인스턴스 정보 삭제
