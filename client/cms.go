@@ -18,7 +18,7 @@ type CmsClient struct {
 }
 
 type CmsNewInstanceResponse struct {
-	IP      string `json:"ip"`
+	IP      string `json:"IP"`
 	MacAddr string `json:"macAddr"`
 	SdnUUID string `json:"sdnUUID"`
 }
@@ -32,7 +32,7 @@ type cmsNewInstanceRequestBody struct {
 }
 
 type cmsDeleteInstanceRequestBody struct {
-	IP string `json:"ip"`
+	IP string `json:"IP"`
 }
 
 func NewCmsClient() *CmsClient {
