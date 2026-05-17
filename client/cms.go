@@ -57,12 +57,12 @@ func (c *CmsClient) RequestDeleteInstance(ip string) (*CmsDeleteInstanceResponse
 	reqURL := fmt.Sprintf("http://%s/New/Instance", c.baseURL)
 	jsonBody, err := json.Marshal(cmsDeleteInstanceRequestBody{IP: ip})
 	if err != nil {
-		log.Error("CMS : failed to marshal JSON: %v", err)
+		log.Error("CmsClient.RequestDeleteInstance : failed to marshal JSON: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: failed to marshal JSON: %w", err)
 	}
 	req, err := http.NewRequest("DELETE", reqURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		log.Error("CMS : failed to NewRequest: %v", err)
+		log.Error("CmsClient.RequestDeleteInstance : failed to NewRequest: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: failed to create HTTP request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -73,19 +73,19 @@ func (c *CmsClient) RequestDeleteInstance(ip string) (*CmsDeleteInstanceResponse
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		log.Error("CMS : failed to send request: %v", err)
+		log.Error("CmsClient.RequestDeleteInstance : failed to send request: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Error("CMS : CMS returned status: %s", resp.Status)
+		log.Error("CmsClient.RequestDeleteInstance : CMS returned status: %s", resp.Status)
 		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: CMS server returned non-OK status: %s", resp.Status)
 	}
 
 	var addrResp CmsDeleteInstanceResponse
 	if err := json.NewDecoder(resp.Body).Decode(&addrResp); err != nil {
-		log.Error("CMS : failed to decode CMS response: %v", err)
+		log.Error("CmsClient.RequestDeleteInstance : failed to decode CMS response: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestDeleteInstance: failed to decode response: %w", err)
 	}
 	return &addrResp, nil
@@ -98,13 +98,13 @@ func (c *CmsClient) RequestNewInstance(subnet string) (*CmsNewInstanceResponse, 
 	reqURL := fmt.Sprintf("http://%s/New/Instance", c.baseURL)
 	jsonBody, err := json.Marshal(cmsNewInstanceRequestBody{Subnet: subnet})
 	if err != nil {
-		log.Error("CMS : failed to marshal JSON: %v", err)
+		log.Error("CmsClient.RequestNewInstance : failed to marshal JSON: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestNewInstance: failed to marshal JSON: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", reqURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		log.Error("CMS : failed to NewRequest: %v", err)
+		log.Error("CmsClient.RequestNewInstance : failed to NewRequest: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestNewInstance: failed to create HTTP request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -115,19 +115,19 @@ func (c *CmsClient) RequestNewInstance(subnet string) (*CmsNewInstanceResponse, 
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		log.Error("CMS : failed to send request: %v", err)
+		log.Error("CmsClient.RequestNewInstance : failed to send request: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestNewInstance: failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Error("CMS : CMS returned status: %s", resp.Status)
+		log.Error("CmsClient.RequestNewInstance : CMS returned status: %s", resp.Status)
 		return nil, fmt.Errorf("CmsClient.RequestNewInstance: CMS server returned non-OK status: %s", resp.Status)
 	}
 
 	var addrResp CmsNewInstanceResponse
 	if err := json.NewDecoder(resp.Body).Decode(&addrResp); err != nil {
-		log.Error("CMS : failed to decode CMS response: %v", err)
+		log.Error("CmsClient.RequestNewInstance : failed to decode CMS response: %v", err)
 		return nil, fmt.Errorf("CmsClient.RequestNewInstance: failed to decode response: %w", err)
 	}
 	return &addrResp, nil
