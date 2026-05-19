@@ -10,7 +10,7 @@ on:
         type: string
   push:
     branches:
-      - Dev
+      - staging
 
 jobs:
   build-and-deploy:
