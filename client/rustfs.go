@@ -2,17 +2,34 @@ package client
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type RustFSClient struct {
 	client *s3.Client
+}
+
+var (
+	rustFSInstance *RustFSClient
+	rustFSOnce     sync.Once
+	rustFSErr      error
+)
+
+func GetRustFSClient() (*RustFSClient, error) {
+	rustFSOnce.Do(func() {
+		rustFSInstance, rustFSErr = NewRustFSClient()
+	})
+	return rustFSInstance, rustFSErr
 }
 
 // Currently RustFSClient has solid s3.Client as its field,
@@ -21,7 +38,7 @@ type RustFSClient struct {
 func NewRustFSClient() (*RustFSClient, error) {
 	endpoint := os.Getenv("RUSTFS_ENDPOINT")
 	if endpoint == "" {
-		endpoint = "http://localhost:9001"
+		endpoint = "http://localhost:9000"
 	}
 	accessKey := os.Getenv("RUSTFS_ACCESS_KEY")
 	if accessKey == "" {
@@ -68,12 +85,9 @@ func (c *RustFSClient) CreateBucket(ctx context.Context, bucket string) error {
 	return err
 }
 
-// / Refer:  https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3#NewPresignClient
+// Refer: https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/s3#NewPresignClient
 // Direct listing, generating bucket and presigned URL is the role for RustFSClient(control)
 // This Presigned url should be passed to Core client, and core should use this url to upload/download file.
-// This Presigend related functions are yet not fully tested, so there might be some issues. Please refer to AWS SDK for Go v2 documentation
-//
-//	for more details and examples on how to use the PresignClient.
 func (c *RustFSClient) PresignPutObject(ctx context.Context, bucket, key string, expires time.Duration) (string, error) {
 	presignClient := s3.NewPresignClient(c.client)
 	req, err := presignClient.PresignPutObject(ctx, &s3.PutObjectInput{
@@ -98,16 +112,47 @@ func (c *RustFSClient) PresignGetObject(ctx context.Context, bucket, key string,
 	return req.URL, nil
 }
 
-// newCLI := &RustFSClient{client: client}
-// ctx, cancel := context.WithTimeout(context.Background(), time.Duration(20)*time.Second)
-// defer cancel()
-// err = newCLI.CreateBucket(ctx, "adsfasdfds")
-// err = newCLI.CreateBucket(ctx, "asdfaifdsfn")
-// err = newCLI.CreateBucket(ctx, "asdf")
-// err = newCLI.CreateBucket(ctx, "zxvc")
-// err = newCLI.CreateBucket(ctx, "asdfs")
-// bucks, err := newCLI.ListBuckets(ctx)
-// fmt.Println(bucks)
-// if err != nil {
-// 	fmt.Println(err)
-// }
+// HeadObject returns (true, nil) if the object exists, (false, nil) if only the object is missing,
+// and (false, err) for all other errors including NoSuchBucket.
+func (c *RustFSClient) HeadObject(ctx context.Context, bucket, key string) (bool, error) {
+	_, err := c.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		var notFound *types.NotFound
+		if errors.As(err, &notFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("HeadObject %s/%s: %w", bucket, key, err)
+	}
+	return true, nil
+}
+
+// ListObjects returns all object keys in the bucket matching the prefix.
+// Returns an empty slice when no objects match. Returns an error if the bucket does not exist.
+func (c *RustFSClient) ListObjects(ctx context.Context, bucket, prefix string) ([]string, error) {
+	out, err := c.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String(bucket),
+		Prefix: aws.String(prefix),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ListObjects %s: %w", bucket, err)
+	}
+	keys := make([]string, len(out.Contents))
+	for i, obj := range out.Contents {
+		keys[i] = aws.ToString(obj.Key)
+	}
+	return keys, nil
+}
+
+func (c *RustFSClient) DeleteObject(ctx context.Context, bucket, key string) error {
+	_, err := c.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("DeleteObject %s/%s: %w", bucket, key, err)
+	}
+	return nil
+}
