@@ -19,16 +19,17 @@ type UserInfoVM struct {
 }
 
 type CreateVMRequest struct {
-	DomType      string         `json:"domType"`
-	DomName      string         `json:"domName"`
-	UUID         structure.UUID `json:"uuid"`
-	OS           string         `json:"os"`
-	HardwareInfo HardwareInfo   `json:"HWInfo"`
-	NetConf      NetDefine      `json:"network"`
-	Users        []UserInfoVM   `json:"users"`
-	SdnUUID      string         `json:"sdnUUID"`
-	MacAddr      string         `json:"macAddr"`
-	Subnettype   string         `json:"Subnettype"`
+	DomType           string         `json:"domType"`
+	DomName           string         `json:"domName"`
+	UUID              structure.UUID `json:"uuid"`
+	OS                string         `json:"os"`
+	HardwareInfo      HardwareInfo   `json:"HWInfo"`
+	NetConf           NetDefine      `json:"network"`
+	Users             []UserInfoVM   `json:"users"`
+	SdnUUID           string         `json:"sdnUUID"`
+	MacAddr           string         `json:"macAddr"`
+	Subnettype        string         `json:"Subnettype"`
+	PresignedImageURL string         `json:"presignedImageUrl,omitempty"`
 }
 
 type DomainDeleteType uint

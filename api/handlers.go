@@ -29,6 +29,10 @@ func Server(portNum int, contextStruct *vms.ControlContext, rdb *redis.Client) e
 	http.HandleFunc("GET /vm/info", withSecurityHeaders(h.vmInfo))
 	http.HandleFunc("POST /vm/start", withSecurityHeaders(h.startVm))
 
+	http.HandleFunc("POST /vm/snapshot", withSecurityHeaders(h.takeSnapshot))
+	http.HandleFunc("GET /vm/snapshot", withSecurityHeaders(h.listSnapshots))
+	http.HandleFunc("DELETE /vm/snapshot", withSecurityHeaders(h.deleteSnapshot))
+
 	fmt.Printf("Running server on port %d\n", portNum)
 	err := http.ListenAndServe(":"+strconv.Itoa(portNum), nil)
 	if err != nil {
