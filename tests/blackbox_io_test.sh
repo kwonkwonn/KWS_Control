@@ -399,6 +399,84 @@ else
 fi
 
 # ============================================================
+# Section 7: Snapshot API
+# ============================================================
+section "Section 7: Snapshot API"
+
+SNAP_UUID="snap-vm-$(date +%s)"
+
+mc_exec() {
+    docker run --rm --network "${PROJECT_NAME}_default" --entrypoint sh minio/mc \
+        -c "mc alias set r http://kws-test-rustfs:9000 minioadmin minioadmin --quiet 2>/dev/null && $*" 2>/dev/null
+}
+
+# --- 7a. Validation ---
+echo -e "  ${CYAN}-- Validation --${NC}"
+
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "${BASE_URL}/vm/snapshot" 2>/dev/null) || HTTP_CODE="000"
+assert_status "GET /vm/snapshot without uuid param should be 400" "400" "$HTTP_CODE"
+
+http POST "/vm/snapshot" '{invalid}'
+assert_status "POST /vm/snapshot with invalid JSON should be 400" "400" "$HTTP_CODE"
+
+http POST "/vm/snapshot" '{"uuid":"x"}'
+assert_status "POST /vm/snapshot missing snapName should be 400" "400" "$HTTP_CODE"
+
+http DELETE "/vm/snapshot" '{"uuid":"x"}'
+assert_status "DELETE /vm/snapshot missing snapKey should be 400" "400" "$HTTP_CODE"
+
+# --- 7b. Non-existent UUID ---
+echo -e "\n  ${CYAN}-- Non-existent UUID --${NC}"
+
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "${BASE_URL}/vm/snapshot?uuid=ghost-vm-0000" 2>/dev/null) || HTTP_CODE="000"
+assert_status "GET /vm/snapshot with non-existent bucket should be 500" "500" "$HTTP_CODE"
+
+http POST "/vm/snapshot" '{"uuid":"ghost-vm-0000","snapName":"snap1"}'
+assert_status "POST /vm/snapshot with unknown VM should be 500" "500" "$HTTP_CODE"
+
+http DELETE "/vm/snapshot" '{"uuid":"ghost-vm-0000","snapKey":"snap1"}'
+assert_status "DELETE /vm/snapshot on non-existent bucket should be 500" "500" "$HTTP_CODE"
+
+# --- 7c. Happy Path ---
+echo -e "\n  ${CYAN}-- Happy Path --${NC}"
+
+http POST "/vm" "{
+  \"domType\": \"kvm\",
+  \"domName\": \"snap-test-vm\",
+  \"uuid\": \"${SNAP_UUID}\",
+  \"os\": \"ubuntu\",
+  \"HWInfo\": {\"cpu\": 1, \"memory\": 1024, \"disk\": 10},
+  \"network\": {\"ips\": [], \"NetType\": 0},
+  \"users\": [{\"name\": \"ubuntu\", \"groups\": \"sudo\", \"passWord\": \"testpass\", \"ssh\": []}],
+  \"Subnettype\": \"\"
+}"
+assert_status "Create VM for snapshot test should be 201" "201" "$HTTP_CODE"
+
+mc_exec "mc mb r/${SNAP_UUID} && echo seed > /tmp/f && mc cp /tmp/f r/${SNAP_UUID}/snap-seed"
+
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X GET "${BASE_URL}/vm/snapshot?uuid=${SNAP_UUID}" 2>/dev/null) || HTTP_CODE="000"
+assert_status "GET /vm/snapshot should be 200" "200" "$HTTP_CODE"
+
+HTTP_BODY=$(curl -s "${BASE_URL}/vm/snapshot?uuid=${SNAP_UUID}" 2>/dev/null)
+assert_body_contains "GET /vm/snapshot returns seeded key" "snap-seed" "$HTTP_BODY"
+
+http DELETE "/vm/snapshot" "{\"uuid\":\"${SNAP_UUID}\",\"snapKey\":\"snap-seed\"}"
+assert_status "DELETE /vm/snapshot should be 200" "200" "$HTTP_CODE"
+
+HTTP_BODY=$(curl -s "${BASE_URL}/vm/snapshot?uuid=${SNAP_UUID}" 2>/dev/null)
+if echo "$HTTP_BODY" | grep -q "snap-seed"; then
+    fail "Snapshot list after delete should not contain snap-seed" "not snap-seed" "$HTTP_BODY"
+else
+    pass "Snapshot list after delete is empty"
+fi
+
+# TakeSnapshot: presigned URL 생성까지만 동작 (Core 호출 TODO)
+http POST "/vm/snapshot" "{\"uuid\":\"${SNAP_UUID}\",\"snapName\":\"snap-new\"}"
+assert_status "POST /vm/snapshot (presign only, Core TODO) should be 200" "200" "$HTTP_CODE"
+
+http DELETE "/vm" "{\"uuid\":\"${SNAP_UUID}\"}"
+
+# ============================================================
 # Results
 # ============================================================
 section "Test Results"
