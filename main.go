@@ -30,7 +30,7 @@ func main() {
 		log.Error("Failed to initialize: %v", err, true)
 		panic(err)
 	}
-	printCores(contextStruct.Cores)
+	printCores(contextStruct.Resources.Cores)
 
 	go func() {
 		err := api.Server(contextStruct.Config.Port, &contextStruct, rdb)

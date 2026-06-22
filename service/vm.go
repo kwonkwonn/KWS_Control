@@ -2,294 +2,270 @@ package service
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
-	"slices"
-	"strings"
 	"time"
 
-	"github.com/easy-cloud-Knet/KWS_Control/request"
-	"github.com/easy-cloud-Knet/KWS_Control/request/model"
+	"github.com/easy-cloud-Knet/KWS_Control/client"
+	"github.com/easy-cloud-Knet/KWS_Control/client/model"
+	"github.com/easy-cloud-Knet/KWS_Control/pkg/guacamole"
+	internalssh "github.com/easy-cloud-Knet/KWS_Control/pkg/ssh"
 	"github.com/easy-cloud-Knet/KWS_Control/util"
 	"github.com/redis/go-redis/v9"
 
 	vms "github.com/easy-cloud-Knet/KWS_Control/structure"
 )
 
-// 새 VM 만드는 무언가.
-// 자원 많이 남은 코어를 찾고, 리소스 할당 업데이트, ControlContext 상태 업데이트.
-func CreateVM(w http.ResponseWriter, r *http.Request, contextStruct *vms.ControlContext, rdb *redis.Client) error {
+func CreateVM(input CreateVMInput, contextStruct *vms.ControlContext, rdb *redis.Client) error {
 	log := util.GetLogger()
-
-	var req model.CreateVMRequest
-	defer r.Body.Close() // defer << 에러가 발생해도 body가 닫히도록 보장.
-
-	contentType := r.Header.Get("Content-Type")
-	if contentType == "" {
-		log.Warn("No Content-Type header specified, assuming application/json", true)
-	} else if !strings.Contains(contentType, "application/json") {
-		log.Warn("Content-Type is not application/json: %s", contentType, true)
+	uuid := input.UUID
+	hwReq := vms.HardwareRequirement{
+		Memory: input.HardwareInfo.Memory,
+		CPU:    input.HardwareInfo.CPU,
+		Disk:   input.HardwareInfo.Disk,
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Error("err req body parsing: %v", err, true)
-		log.DebugError("Request Content-Type: %s", contentType)
+	log.Info("func CreateVM() memory=%d GiB, cpu=%d, disk=%d GiB", hwReq.Memory, hwReq.CPU, hwReq.Disk, true)
 
-		if strings.Contains(err.Error(), "invalid character") {
-			return errors.New("invalid JSON format in request body - check for encoding issues or malformed JSON")
-		}
-		return errors.New("err req body parsing: " + err.Error())
-	}
-
-	if req.HardwareInfo.Memory == 0 || req.HardwareInfo.CPU == 0 || req.HardwareInfo.Disk == 0 {
-		return errors.New("invalid JSON format in request body - check for Memory or CPU or Disk")
-	}
-
-	log.Info("func CreateVM() memory=%d GiB, cpu=%d, disk=%d GiB", req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk, true)
-
-	// err = validateCreateVMRequest(req)
-
-	// guacamole 부분 필요
-
-	// 적합한 코어 찾기
-	log.DebugInfo("core selection process. req: memory=%d GiB, cpu=%d, disk=%d",
-		req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk)
-
-	var selectedCore *vms.Core = nil
-	selectedCoreIndex := -1
-	aliveCount := 0
-
-	for i := range contextStruct.Cores {
-		core := &contextStruct.Cores[i]
-		log.DebugInfo("core %s checking: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d, IsAlive=%t", core.IP, core.FreeMemory, core.FreeCPU, core.FreeDisk, core.IsAlive)
-
-		if !core.IsAlive {
-			log.DebugWarn("core %s is not alive, skipping", core.IP)
-			continue
-		}
-		aliveCount++
-
-		memoryOk := core.FreeMemory >= req.HardwareInfo.Memory
-		cpuOk := core.FreeCPU >= req.HardwareInfo.CPU
-		diskOk := core.FreeDisk >= req.HardwareInfo.Disk
-
-		if req.HardwareInfo.Disk == 0 {
-			log.DebugError("test")
-		}
-
-		if !memoryOk {
-			log.DebugWarn("%s !memoryOk: req=%d, available=%d", core.IP, req.HardwareInfo.Memory, core.FreeMemory)
-		}
-		if !cpuOk {
-			log.DebugWarn("%s !cpuOk   : req=%d, available=%d", core.IP, req.HardwareInfo.CPU, core.FreeCPU)
-		}
-		if !diskOk {
-			log.DebugWarn("%s !diskOk  : req=%d, available=%d", core.IP, req.HardwareInfo.Disk, core.FreeDisk)
-		}
-
-		if memoryOk && cpuOk && diskOk {
-			selectedCore = core
-			selectedCoreIndex = i
-			log.DebugInfo("core found: %s", selectedCore.IP)
-			break
-		} else {
-			log.DebugInfo("%s rejected: memory=%t, cpu=%t, disk=%t", core.IP, memoryOk, cpuOk, diskOk)
-		}
-	}
-
-	if selectedCore == nil {
-		log.Error("No suitable core found! Total cores: %d, Alive cores: %d, Required: Memory=%d CPU=%d Disk=%d",
-			len(contextStruct.Cores), aliveCount, req.HardwareInfo.Memory, req.HardwareInfo.CPU, req.HardwareInfo.Disk, true)
-
-		if aliveCount > 0 {
-			log.DebugError("alive cores:")
-			for i := range contextStruct.Cores {
-				core := &contextStruct.Cores[i]
-				if core.IsAlive {
-					log.DebugError("  %s: Memory=%d/%d, CPU=%d/%d, Disk=%d/%d",
-						core.IP, core.FreeMemory, core.CoreInfoIdx.Memory, core.FreeCPU, core.CoreInfoIdx.Cpu, core.FreeDisk, core.CoreInfoIdx.Disk)
-				}
-			}
-		} else {
-			log.DebugError("no alive cores available")
-		}
-
-		return errors.New("selectedCore == nil")
-	}
-	var privateKeyPEM, publicKeyOpenSSH, err = GenerateSshKey()
+	// 1) 코어 선택
+	selectedCore, selectedCoreIndex, err := selectCoreOrFail(contextStruct, hwReq)
 	if err != nil {
-		log.Error("GenerateSshKey() failed: %v", err, true)
 		return err
 	}
 
-	// add : back -> vm uuid    ->  cms   다른 api
-	// new : subnet 찾기 -> cms
-
-	// 문제가 생겼을 때 지우는 무언가
-	var guacamoleConfigured = false
-	var coreResourcesAllocated = false
-	var newSubnetAllocated = false
-	var uuid = vms.UUID(req.UUID.String().(string))
-
-	cleanup := func() {
-		if guacamoleConfigured {
-			log.Info("clean up clean up")
-			if cleanupErr := CleanupGuacamoleConfig(string(uuid), contextStruct.GuacDB); cleanupErr != nil {
-				log.Error("Failed to cleanup Guacamole config during rollback: %v", cleanupErr)
-			}
-		}
-		if coreResourcesAllocated {
-			delete(selectedCore.VMInfoIdx, uuid)
-			selectedCore.FreeMemory += req.HardwareInfo.Memory
-			selectedCore.FreeCPU += req.HardwareInfo.CPU
-			selectedCore.FreeDisk += req.HardwareInfo.Disk
-		}
-		if newSubnetAllocated {
-			//subnet--
-		}
-	}
-
-	var cmsResp *CmsResponse
-	cmsClient := NewCmsClient()
-
-	if req.Subnettype == "Add" {
-		cmsResp, err = cmsClient.AddCmsSubnet(contextStruct, uuid)
-	} else {
-		cmsResp, err = cmsClient.NewCmsSubnet(contextStruct)
-		newSubnetAllocated = true
-	}
+	// 2) SSH 키 생성
+	privateKeyPEM, publicKeyOpenSSH, err := internalssh.GenerateSSHKey()
 	if err != nil {
-		log.Error("Failed to configure cms", true)
-		return errors.New("failed to configure cms")
+		log.Error("GenerateSshKey() failed: %v", err, true)
+		return fmt.Errorf("CreateVM: failed to generate SSH key: %w", err)
 	}
 
-	fmt.Printf("%s\n", cmsResp.IP)
-	fmt.Printf("%s\n", cmsResp.MacAddr)
-	fmt.Printf("%s\n", cmsResp.SdnUUID)
+	// 단계별 롤백 등록을 위한 chain
+	cleanup := &cleanupChain{}
 
-	userPass := GuacamoleConfig(req.Users[0].Name, string(req.UUID), cmsResp.IP, privateKeyPEM, contextStruct.GuacDB)
+	//사용자 수 확인
+	if len(input.Users) == 0 {
+		cleanup.run()
+		log.Error("CreateVM: at least one user is required for Guacamole configuration", true)
+		return fmt.Errorf("CreateVM: at least one user is required")
+	}
 
+	// 3) CMS 서브넷 할당 (Add: 기존 서브넷 / New: 신규 서브넷)
+	cmsResp, isNewSubnet, err := allocateCmsSubnet(contextStruct, input.SubnetType, uuid)
+	if err != nil {
+		//TODO  AllocateCmsSubnet cleanup logic implement
+		log.Error("CreateVM: failed to allocate CMS subnet: %v", err, true)
+		return fmt.Errorf("CreateVM: failed to allocate CMS subnet: %w", err)
+	}
+
+	log.DebugInfo("CMS allocated: ip=%s, mac=%s, sdn=%s", cmsResp.IP, cmsResp.MacAddr, cmsResp.SdnUUID)
+
+	// 4) Guacamole 사용자/커넥션 설정
+	userPass := guacamole.Configure(input.Users[0].Name, string(uuid), cmsResp.IP, privateKeyPEM, contextStruct.GuacDB)
 	if userPass == "" {
-		log.Error("Failed to configure Guacamole", true)
-		return errors.New("failed to configure Guacamole")
+		cleanup.run()
+		log.Error("CreateVM: failed to configure Guacamole", true)
+		return fmt.Errorf("CreateVM: failed to configure Guacamole")
 	}
-	guacamoleConfigured = true
+	cleanup.push(func() {
+		log.Info("clean up: guacamole")
+		if err := guacamole.Cleanup(string(uuid), contextStruct.GuacDB); err != nil {
+			log.Error("Failed to cleanup Guacamole config during rollback: %v", err)
+		}
+	})
 
 	newVM := &vms.VMInfo{
 		UUID:         uuid,
 		GuacPassword: userPass,
 		MacAddr:      cmsResp.MacAddr,
-		Memory:       req.HardwareInfo.Memory,
-		Cpu:          req.HardwareInfo.CPU,
-		Disk:         req.HardwareInfo.Disk,
+		Memory:       hwReq.Memory,
+		Cpu:          hwReq.CPU,
+		Disk:         hwReq.Disk,
 		IP_VM:        cmsResp.IP,
 	}
 
-	// selected core 상태 업데이트
-	if selectedCore.VMInfoIdx == nil {
-		selectedCore.VMInfoIdx = make(map[vms.UUID]*vms.VMInfo)
-	}
-	selectedCore.VMInfoIdx[uuid] = newVM
-	selectedCore.FreeMemory -= req.HardwareInfo.Memory
-	selectedCore.FreeCPU -= req.HardwareInfo.CPU
-	selectedCore.FreeDisk -= req.HardwareInfo.Disk
-	coreResourcesAllocated = true
+	// 5) 코어 자원 할당 (VMInfoIdx + Free* 원자적 갱신)
+	contextStruct.Resources.AllocateResources(selectedCore, uuid, newVM, hwReq)
+	cleanup.push(func() {
+		contextStruct.Resources.DeallocateResources(selectedCore, uuid, hwReq)
+	})
+	log.DebugInfo("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d",
+		selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
 
-	log.DebugInfo("core %s updated: FreeMemory=%d, FreeCPU=%d, FreeDisk=%d", selectedCore.IP, selectedCore.FreeMemory, selectedCore.FreeCPU, selectedCore.FreeDisk)
-
-	req.NetConf.Ips = []string{cmsResp.IP}
-	req.SdnUUID = cmsResp.SdnUUID
-	req.MacAddr = cmsResp.MacAddr
-	req.NetConf.NetType = 0
-	req.Users[0].SSHAuthorizedKeys = []string{publicKeyOpenSSH}
-
-	vmRedisInfo := model.VMRedisInfo{
+	// 6) Redis에 초기 상태 저장 (Core 호출 전에 — Core가 상태 갱신할 수 있도록)
+	if err := StoreVMInfoToRedis(context.Background(), rdb, VMInfo{
 		UUID:   uuid,
-		CPU:    req.HardwareInfo.CPU,
-		Memory: req.HardwareInfo.Memory,
-		Disk:   req.HardwareInfo.Disk,
+		CPU:    hwReq.CPU,
+		Memory: hwReq.Memory,
+		Disk:   hwReq.Disk,
 		IP:     cmsResp.IP,
-		Status: model.VMStatusUnknown, // prepare begin 으로 초기화 함
-		Time:   time.Now().Unix(),
-	}
-
-	// HTTP 전송 전에 저장을 완료하여 Core에서 업데이트할 수 있도록 순서 보장
-	if err := StoreVMInfoToRedis(context.Background(), rdb, vmRedisInfo); err != nil {
+		Status: VMStatusUnknown,
+	}, time.Now().Unix()); err != nil {
 		log.Warn("failed to store VM info to redis: %v", err, true)
-		// redis 저장 실패를 vm생성 실패로 처리하지는 않음
+		// redis 저장 실패는 vm 생성 실패로 처리하지 않음
 	}
 
-	// Redis 저장 완료 후 HTTP 전송 (Core에서 Redis 업데이트 가능)
-	client := request.NewCoreClient(selectedCore)
-	_, err = client.CreateVM(context.Background(), req)
-	if err != nil {
+	// 7) Core에 VM 생성 요청 — service DTO를 client contract로 변환
+	coreReq := buildCoreCreateVMRequest(input, cmsResp, publicKeyOpenSSH)
+	coreClient := client.NewCoreClient(selectedCore)
+	if _, err := coreClient.CreateVM(context.Background(), coreReq); err != nil {
 		log.Error("Error creating VM on core %s: %v", selectedCore.IP, err, true)
-		cleanup() // 직접 지우지 말고 요 함수 하나로--
-		return err
+		cleanup.run()
+		return fmt.Errorf("CreateVM: failed to create VM on core %s: %w", selectedCore.IP, err)
 	}
 
-	err = contextStruct.AddInstance(newVM, selectedCoreIndex)
-	if err != nil {
+	// 8) DB에 인스턴스 정보 영속화
+	if err := contextStruct.VMRepo.AddInstance(newVM, selectedCoreIndex); err != nil {
 		log.Error("Error database instance insertion failed: %v", err, true)
-		cleanup() // 직접 지우지 말고 요 함수 하나로--
+		cleanup.run()
+		return fmt.Errorf("CreateVM: failed to persist instance: %w", err)
 	}
 
-	if newSubnetAllocated {
-		_, err := contextStruct.DB.Exec("UPDATE subnet SET last_subnet = ? WHERE id = '1'", cmsResp.IP)
-		if err != nil {
-			log.Error("Error database Subnet insertion failed: %v", err, true)
+	// 8-1) 신규 서브넷 할당이었다면 last_subnet을 실제 할당된 IP로 갱신
+	// (NewCmsSubnet에서 계산값으로 선점한 것을 CMS 응답값으로 정정)
+	if isNewSubnet {
+		if _, err := contextStruct.DB.Exec("UPDATE subnet SET last_subnet = ? WHERE id = '1'", cmsResp.IP); err != nil {
+			log.Error("Error database Subnet update failed: %v", err, true)
 		}
 	}
 
-	// ControlContext global 상태 업데이트
-	if contextStruct.VMLocation == nil {
-		contextStruct.VMLocation = make(map[vms.UUID]*vms.Core)
-	}
-	contextStruct.VMLocation[uuid] = &contextStruct.Cores[selectedCoreIndex]
-	contextStruct.AliveVM = append(contextStruct.AliveVM, newVM)
+	contextStruct.Resources.RegisterVM(uuid, &contextStruct.Resources.Cores[selectedCoreIndex], newVM)
 	log.Info("VM %s added to ControlContext", uuid, true)
 
 	log.Info("UUID %s CreateVM request success on core %s", uuid, selectedCore.IP, true)
 	return nil
 }
 
+// 추후 Mapper 계층이 필요할 것으로 예상됨
+func buildCoreCreateVMRequest(input CreateVMInput, cmsResp *client.CmsNewInstanceResponse, publicKeyOpenSSH string) model.CreateVMRequest {
+	users := make([]model.UserInfoVM, len(input.Users))
+	for i, u := range input.Users {
+		users[i] = model.UserInfoVM{
+			Name:              u.Name,
+			Groups:            u.Groups,
+			Password:          u.Password,
+			SSHAuthorizedKeys: u.SSHAuthorizedKeys,
+		}
+	}
+	// 첫 번째 사용자는 생성 시 발급한 SSH 공개키를 사용
+	if len(users) > 0 {
+		users[0].SSHAuthorizedKeys = []string{publicKeyOpenSSH}
+	}
+	return model.CreateVMRequest{
+		DomType:      input.DomType,
+		DomName:      input.DomName,
+		UUID:         input.UUID,
+		OS:           input.OS,
+		HardwareInfo: model.HardwareInfo{CPU: input.HardwareInfo.CPU, Memory: input.HardwareInfo.Memory, Disk: input.HardwareInfo.Disk},
+		NetConf:      model.NetDefine{Ips: []string{cmsResp.IP}, NetType: 0},
+		Users:        users,
+		SdnUUID:      cmsResp.SdnUUID,
+		MacAddr:      cmsResp.MacAddr,
+		Subnettype:   input.SubnetType,
+	}
+}
+
+// selectCoreOrFail은 코어 선택 + 실패 시 진단 로그 출력 캡슐화를 진행
+func selectCoreOrFail(contextStruct *vms.ControlContext, req vms.HardwareRequirement) (*vms.Core, int, error) {
+	log := util.GetLogger()
+
+	log.DebugInfo("core selection process. req: memory=%d GiB, cpu=%d, disk=%d", req.Memory, req.CPU, req.Disk)
+	result := contextStruct.Resources.SelectCore(req)
+
+	if result.Core != nil {
+		log.DebugInfo("core found: %s (idx=%d)", result.Core.IP, result.Index)
+		return result.Core, result.Index, nil
+	}
+
+	log.Error("No suitable core found! Total cores: %d, Alive cores: %d, Required: Memory=%d CPU=%d Disk=%d",
+		result.TotalCores, result.AliveCount, req.Memory, req.CPU, req.Disk, true)
+
+	if result.AliveCount > 0 {
+		log.DebugError("alive cores:")
+		contextStruct.Resources.RLock()
+		for i := range contextStruct.Resources.Cores {
+			core := &contextStruct.Resources.Cores[i]
+			if core.IsAlive {
+				log.DebugError("  %s: Memory=%d/%d, CPU=%d/%d, Disk=%d/%d",
+					core.IP, core.FreeMemory, core.CoreInfoIdx.Memory,
+					core.FreeCPU, core.CoreInfoIdx.Cpu,
+					core.FreeDisk, core.CoreInfoIdx.Disk)
+			}
+		}
+		contextStruct.Resources.RUnlock()
+	} else {
+		log.DebugError("no alive cores available")
+	}
+
+	return nil, -1, fmt.Errorf("CreateVM: no suitable core found")
+}
+
+func allocateCmsSubnet(contextStruct *vms.ControlContext, subnetType string, uuid vms.UUID) (*client.CmsNewInstanceResponse, bool, error) {
+	log := util.GetLogger()
+	cmsClient := client.NewCmsClient()
+
+	if subnetType == "Add" {
+		resp, err := AddCmsSubnet(cmsClient, contextStruct, uuid)
+		if err != nil {
+			log.Error("CreateVM: failed to configure cms (Add): %v", err, true)
+			return nil, false, fmt.Errorf("CreateVM: failed to configure cms: %w", err)
+		}
+		return resp, false, nil
+	}
+
+	resp, err := NewCmsSubnet(cmsClient, contextStruct)
+	if err != nil {
+		log.Error("CreateVM: failed to configure cms (New): %v", err, true)
+		return nil, false, fmt.Errorf("CreateVM: failed to configure cms: %w", err)
+	}
+	// 신규 서브넷 할당 시: 후속 단계 실패에 대한 별도 DB 롤백 로직은 미구현 상태 (TODO)
+
+	return resp, true, nil
+}
+
 func DeleteVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Client) error {
 	log := util.GetLogger()
+
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
 		log.Error("VM with UUID %s not found", string(uuid))
 		return fmt.Errorf("VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-	_, err := client.DeleteVM(context.Background(), model.DeleteVMRequest{
+	// 1) Core에 VM 삭제 요청
+	coreClient := client.NewCoreClient(core)
+	if _, err := coreClient.DeleteVM(context.Background(), model.DeleteVMRequest{
 		UUID: uuid,
 		Type: model.HardDelete,
-	})
-	if err != nil {
-		log.Error("error deleting VM %s on core %s: %w", uuid, core.IP, err)
-		return err
+	}); err != nil {
+		log.Error("error deleting VM %s on core %s: %v", uuid, core.IP, err)
+		return fmt.Errorf("DeleteVM: failed to delete VM %s on core %s: %w", uuid, core.IP, err)
 	}
 
-	err = contextStruct.DeleteInstance(uuid)
-	if err != nil {
-		log.Error("error deleting instance %s from ControlContext: %v", uuid, err)
-		return err
-	}
-	if cleanupErr := CleanupGuacamoleConfig(string(uuid), contextStruct.GuacDB); cleanupErr != nil {
-		log.Error("Failed to cleanup Guacamole config during rollback: %v", cleanupErr)
+	cmsClient := client.NewCmsClient()
+	if err := DeleteCmsSubnet(cmsClient, contextStruct, uuid); err != nil {
+		log.Error("DeleteVM: failed to delete CMS subnet for VM %s: %v", uuid, err)
+		// CMS 삭제 실패는 로그만 남기고 삭제 자체는 성공으로 처리 (추가적인 수동 정리 필요)
 	}
 
+	// 2) DB에서 인스턴스 정보 삭제
+	if err := contextStruct.VMRepo.DeleteInstance(uuid); err != nil {
+		log.Error("error deleting instance %s from DB: %v", uuid, err)
+		return fmt.Errorf("DeleteVM: failed to delete instance %s: %w", uuid, err)
+	}
+
+	// 3) Guacamole 사용자/커넥션 정리
+	if err := guacamole.Cleanup(string(uuid), contextStruct.GuacDB); err != nil {
+		log.Error("Failed to cleanup Guacamole config: %v", err)
+	}
+
+	// 4) Redis 정리 (실패해도 삭제 자체는 성공으로 처리 추가 처리 로직 필요)
 	if err := RemoveVMInfoFromRedis(context.Background(), rdb, uuid); err != nil {
 		log.Warn("failed to remove vm info from redis (vm deletion succeeded but..): %v", err, true)
-		// 얘도 create할 때처럼 redis 값 삭제 실패를 했을 때 del vm 자체를 실패했다고 처리하지는 않음
-		// 물론 어케 처리할지 고민을..
 	}
 
 	return nil
 }
+
 func StartVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 	log := util.GetLogger()
 
@@ -298,12 +274,9 @@ func StartVM(uuid vms.UUID, contextStruct *vms.ControlContext) error {
 		return fmt.Errorf("VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-	_, err := client.StartVM(context.Background(), model.StartVMRequest{
-		UUID: uuid,
-	})
-	if err != nil {
-		return err
+	coreClient := client.NewCoreClient(core)
+	if _, err := coreClient.StartVM(context.Background(), model.StartVMRequest{UUID: uuid}); err != nil {
+		return fmt.Errorf("StartVM: failed to start VM %s: %w", uuid, err)
 	}
 
 	log.Info("VM %s started on core %s", uuid, core.IP, true)
@@ -316,100 +289,86 @@ func ShutdownVM(uuid vms.UUID, contextStruct *vms.ControlContext, rdb *redis.Cli
 		return fmt.Errorf("VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-	_, err := client.ForceShutdownVM(context.Background(), model.ForceShutdownVMRequest{
-		UUID: uuid,
-	})
-
-	if err != nil {
-		return err
+	coreClient := client.NewCoreClient(core)
+	if _, err := coreClient.ForceShutdownVM(context.Background(), model.ForceShutdownVMRequest{UUID: uuid}); err != nil {
+		return fmt.Errorf("ShutdownVM: failed to shutdown VM %s: %w", uuid, err)
 	}
 
-	foundIndex := -1
-	for i, vm := range contextStruct.AliveVM {
-		if vm.UUID == uuid {
-			foundIndex = i
-			break
-		}
-	}
+	contextStruct.Resources.UnregisterAlive(uuid)
 
-	if foundIndex != -1 {
-		contextStruct.AliveVM = slices.Delete(contextStruct.AliveVM, foundIndex, foundIndex+1)
-	}
-
-	if err := UpdateVMStatusInRedis(context.Background(), rdb, uuid, model.VMStatusStopped, time.Now().Unix()); err != nil {
-		log := util.GetLogger()
-		log.Warn("failed to update vm status in redis %v", err, true)
+	if err := UpdateVMStatusInRedis(context.Background(), rdb, uuid, VMStatusStopped, time.Now().Unix()); err != nil {
+		util.GetLogger().Warn("failed to update vm status in redis %v", err, true)
 	}
 
 	return nil
 }
 
-func GetVMCpuInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreMachineCpuInfoResponse, error) {
+func GetVMCpuInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (VMCpuStatus, error) {
 	log := util.GetLogger()
 
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
-		msg := fmt.Sprintf("VM with UUID %s not found", string(uuid))
-		log.Error(msg, true)
-		return model.CoreMachineCpuInfoResponse{}, errors.New(msg)
+		log.Error("GetVMCpuInfo: VM with UUID %s not found", string(uuid), true)
+		return VMCpuStatus{}, fmt.Errorf("GetVMCpuInfo: VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-
-	cpuInfo, err := client.GetVMCpuInfo(context.Background(), uuid)
+	coreClient := client.NewCoreClient(core)
+	cpuInfo, err := coreClient.GetVMCpuInfo(context.Background(), uuid)
 	if err != nil {
-		msg := fmt.Sprintf("Error getting CPU info for VM %s on core %s: %v", uuid, core.IP, err)
-		log.Error(msg, true)
-		return model.CoreMachineCpuInfoResponse{}, errors.New(msg)
+		log.Error("GetVMCpuInfo: error getting CPU info for VM %s on core %s: %v", uuid, core.IP, err, true)
+		return VMCpuStatus{}, fmt.Errorf("GetVMCpuInfo: error getting CPU info for VM %s on core %s: %w", uuid, core.IP, err)
 	}
 
 	log.DebugInfo("Retrieved CPU status for VM %s on core %s", uuid, core.IP)
-	return cpuInfo, nil
+	return VMCpuStatus{System: cpuInfo.System, Idle: cpuInfo.Idle, Usage: cpuInfo.Usage}, nil
 }
 
-func GetVMMemoryInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreMachineMemoryInfoResponse, error) {
+func GetVMMemoryInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (VMMemoryStatus, error) {
 	log := util.GetLogger()
 
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
-		msg := fmt.Sprintf("VM with UUID %s not found", string(uuid))
-		log.Error(msg, true)
-		return model.CoreMachineMemoryInfoResponse{}, errors.New(msg)
+		log.Error("GetVMMemoryInfo: VM with UUID %s not found", string(uuid), true)
+		return VMMemoryStatus{}, fmt.Errorf("GetVMMemoryInfo: VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-
-	memoryInfo, err := client.GetVMMemoryInfo(context.Background(), uuid)
+	coreClient := client.NewCoreClient(core)
+	memoryInfo, err := coreClient.GetVMMemoryInfo(context.Background(), uuid)
 	if err != nil {
-		msg := fmt.Sprintf("Error getting memory info for VM %s on core %s: %v", uuid, core.IP, err)
-		log.Error(msg, true)
-		return model.CoreMachineMemoryInfoResponse{}, errors.New(msg)
+		log.Error("GetVMMemoryInfo: error getting memory info for VM %s on core %s: %v", uuid, core.IP, err, true)
+		return VMMemoryStatus{}, fmt.Errorf("GetVMMemoryInfo: error getting memory info for VM %s on core %s: %w", uuid, core.IP, err)
 	}
 
 	log.DebugInfo("Retrieved Memory status for VM %s on core %s", uuid, core.IP)
-	return memoryInfo, nil
+	return VMMemoryStatus{
+		Total:       memoryInfo.Total,
+		Used:        memoryInfo.Used,
+		Available:   memoryInfo.Available,
+		UsedPercent: memoryInfo.UsedPercent,
+	}, nil
 }
 
-func GetVMDiskInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (model.CoreMachineDiskInfoResponse, error) {
+func GetVMDiskInfo(uuid vms.UUID, contextStruct *vms.ControlContext) (VMDiskStatus, error) {
 	log := util.GetLogger()
 
 	core := contextStruct.FindCoreByVmUUID(uuid)
 	if core == nil {
-		msg := fmt.Sprintf("VM with UUID %s not found", string(uuid))
-		log.Error(msg, true)
-		return model.CoreMachineDiskInfoResponse{}, errors.New(msg)
+		log.Error("GetVMDiskInfo: VM with UUID %s not found", string(uuid), true)
+		return VMDiskStatus{}, fmt.Errorf("GetVMDiskInfo: VM with UUID %s not found", string(uuid))
 	}
 
-	client := request.NewCoreClient(core)
-
-	diskInfo, err := client.GetVMDiskInfo(context.Background(), uuid)
+	coreClient := client.NewCoreClient(core)
+	diskInfo, err := coreClient.GetVMDiskInfo(context.Background(), uuid)
 	if err != nil {
-		msg := fmt.Sprintf("Error getting disk info for VM %s on core %s: %v", uuid, core.IP, err)
-		log.Error(msg, true)
-		return model.CoreMachineDiskInfoResponse{}, errors.New(msg)
+		log.Error("GetVMDiskInfo: error getting disk info for VM %s on core %s: %v", uuid, core.IP, err, true)
+		return VMDiskStatus{}, fmt.Errorf("GetVMDiskInfo: error getting disk info for VM %s on core %s: %w", uuid, core.IP, err)
 	}
 
 	log.DebugInfo("Retrieved Disk status for VM %s on core %s", uuid, core.IP)
-	return diskInfo, nil
+	return VMDiskStatus{
+		Total:       diskInfo.Total,
+		Used:        diskInfo.Used,
+		Free:        diskInfo.Free,
+		UsedPercent: diskInfo.UsedPercent,
+	}, nil
 }

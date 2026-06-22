@@ -293,6 +293,7 @@ func parseLogArgs(args ...interface{}) (string, bool) {
 	return message, save
 }
 
+// 현재 미사용중
 func GetEnhancedLogger() *Logger {
 	return NewEnhancedLogger()
 }

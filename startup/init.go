@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/easy-cloud-Knet/KWS_Control/request"
+	"github.com/easy-cloud-Knet/KWS_Control/client"
 	"github.com/easy-cloud-Knet/KWS_Control/structure"
 	"golang.org/x/sync/errgroup"
 
@@ -146,6 +146,8 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 	infra.Config = config
 	infra.GuacDB = db
 	infra.DB = mainDB
+	infra.VMRepo = structure.NewMySQLVMRepository(mainDB)
+	infra.Resources = structure.NewResourceManager()
 
 	var last_subnet_db string
 	err = infra.DB.QueryRow("SELECT last_subnet from core_base.subnet where id = '1'").Scan(&last_subnet_db)
@@ -154,12 +156,11 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 	}
 	infra.Last_subnet = last_subnet_db
 	// 모든 Core 정의
-	infra.VMLocation = make(map[structure.UUID]*structure.Core)
-	for i := range infra.Cores {
-		for vmUUID := range infra.Cores[i].VMInfoIdx {
-			infra.VMLocation[vmUUID] = &infra.Cores[i]
+	for i := range infra.Resources.Cores {
+		for vmUUID := range infra.Resources.Cores[i].VMInfoIdx {
+			infra.Resources.VMLocation[vmUUID] = &infra.Resources.Cores[i]
 		}
-		infra.Cores[i].IsAlive = false
+		infra.Resources.Cores[i].IsAlive = false
 	}
 
 	// config에 설정된 코어에 대해서 정보 업데이트
@@ -185,15 +186,15 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 			return structure.ControlContext{}, fmt.Errorf("error converting port number from %s: %w", coreAddress, err)
 		}
 
-		core := findCore(infra.Cores, ip, uint16(port))
+		core := findCore(infra.Resources.Cores, ip, uint16(port))
 		if core == nil {
 			newCore := structure.Core{
 				IP:      ip,
 				Port:    uint16(port),
 				IsAlive: true,
 			}
-			infra.Cores = append(infra.Cores, newCore)
-			core = &infra.Cores[len(infra.Cores)-1]
+			infra.Resources.Cores = append(infra.Resources.Cores, newCore)
+			core = &infra.Resources.Cores[len(infra.Resources.Cores)-1]
 			log.DebugInfo("Added new core: %s:%d", ip, port)
 		} else {
 			core.IsAlive = true
@@ -201,14 +202,14 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 
 		currentCore := core
 		g.Go(func() error {
-			client := request.NewCoreClient(currentCore)
+			coreClient := client.NewCoreClient(currentCore)
 
-			memResp, err := client.GetCoreMachineMemoryInfo(ctx)
+			memResp, err := coreClient.GetCoreMachineMemoryInfo(ctx)
 			if err != nil {
 				currentCore.IsAlive = false
 				return fmt.Errorf("failed to get Memory info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
 			}
-			diskResp, err := client.GetCoreMachineDiskInfo(ctx)
+			diskResp, err := coreClient.GetCoreMachineDiskInfo(ctx)
 			if err != nil {
 				currentCore.IsAlive = false
 				return fmt.Errorf("failed to get Disk info for core %s:%d: %w", currentCore.IP, currentCore.Port, err)
@@ -243,23 +244,23 @@ func InitializeCoreData(configPath string) (structure.ControlContext, error) {
 		return structure.ControlContext{}, fmt.Errorf("failed to get core info: %w", err)
 	}
 
-	vmInfoList, coreIdxList, err := infra.GetAllInstanceInfo()
+	vmInfoList, coreIdxList, err := infra.VMRepo.GetAllInstanceInfo()
 	if err != nil {
 		return structure.ControlContext{}, fmt.Errorf("failed to get all instance info: %w", err)
 	}
 
 	for i, vmInfo := range vmInfoList {
 		coreIdx := coreIdxList[i]
-		if coreIdx < 0 || coreIdx >= len(infra.Cores) {
+		if coreIdx < 0 || coreIdx >= len(infra.Resources.Cores) {
 			return structure.ControlContext{}, fmt.Errorf("core index %d out of range for core list", coreIdx)
 		}
-		core := &infra.Cores[coreIdx]
+		core := &infra.Resources.Cores[coreIdx]
 		if core.VMInfoIdx == nil {
 			core.VMInfoIdx = make(map[structure.UUID]*structure.VMInfo)
 		}
 		if _, exists := core.VMInfoIdx[vmInfo.UUID]; !exists {
 			core.VMInfoIdx[vmInfo.UUID] = &vmInfo
-			infra.VMLocation[vmInfo.UUID] = core
+			infra.Resources.VMLocation[vmInfo.UUID] = core
 		} else {
 			log.DebugInfo("VM %s already exists in core %d, skipping", vmInfo.UUID, coreIdx)
 		}

@@ -1,3 +1,5 @@
+CLAUDE.md
+
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,goland+all
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,goland+all
 
@@ -18,7 +20,6 @@ out/
 
 # mpeltonen/sbt-idea plugin
 .idea_modules/
-
 # JIRA plugin
 atlassian-ide-plugin.xml
 
